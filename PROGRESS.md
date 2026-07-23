@@ -14,7 +14,8 @@ This file is the single progress log — updated after each completed feature, w
 | v0.1 | `internal/ssh` (client, connection pooling, exec) | done |
 | v0.1 | `internal/linux` (uptime, disk_usage, memory_usage parsers) | done |
 | v0.1 | Remaining tools: run_command, uptime, disk_usage, memory_usage | done |
-| v0.1 | GitHub Actions CI | pending |
+| v0.1 | GitHub Actions CI | done |
+| **v0.1** | **Core infrastructure — complete** | **done** |
 | v0.2+ | Linux extended tools | not started |
 | v0.3+ | Docker | not started |
 | v0.4+ | Kubernetes | not started |
@@ -62,6 +63,11 @@ This file is the single progress log — updated after each completed feature, w
 - `cmd/server/main.go` now wires the full v0.1 dependency graph: inventory → `ssh.Pool` → `linux.Client` → all five tools.
 - All new tools verified through the real MCP protocol (`mcp.NewInMemoryTransports()`), including a table-driven test of each disk/memory severity threshold. 86.8% coverage on `mcp/tools`, 87.4% on `internal/linux`.
 - **v0.1's tool surface (`list_servers`, `run_command`, `uptime`, `disk_usage`, `memory_usage`) is now complete.** Only GitHub Actions CI remains before v0.1 is fully done.
+
+### 2026-07-23 — GitHub Actions CI, v0.1 complete
+- `.github/workflows/ci.yml`: build, `go vet`, `gofmt -l` check, `go test -race -cover`, on push to `main` and on every PR. Uses `go-version-file: go.mod` so CI always tracks whatever Go version the module declares rather than a hardcoded version that can drift.
+- Loosened `go.mod`'s `go` directive from the exact local toolchain version (`1.26.5`, an artifact of `go mod init` capturing whatever was installed) down to `1.24` per README's "Go 1.24+"; `go mod tidy` settled it at `1.25.0` (a transitive dependency's minimum). Still satisfies the README's stated floor.
+- **v0.1 (core infrastructure) is now fully complete**: `list_servers`, `run_command`, `uptime`, `disk_usage`, `memory_usage`, all inventory-driven, all tested against the real MCP protocol, CI green. Next up per the roadmap is v0.2 (Linux: `failed_services`, `cpu_usage`, `reboot_required`, `running_processes`, `journal_errors`, `kernel_version`).
 
 ## Decisions & Deviations from a literal README reading
 
