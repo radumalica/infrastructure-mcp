@@ -1,1 +1,15 @@
 .tokensave
+
+# Go
+/bin/
+*.test
+*.out
+coverage.*
+
+# Local config with secrets
+configs/inventory.local.yaml
+.env
+
+# IDE
+.idea/
+.vscode/
