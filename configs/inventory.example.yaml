@@ -1,0 +1,38 @@
+# Example inventory file. Copy to inventory.yaml (or point --inventory at a
+# copy elsewhere) and fill in real values. Secrets are referenced via
+# environment variable placeholders and resolved at load time — never
+# commit real credentials to this file.
+
+servers:
+  archive:
+    hostname: 10.0.0.5
+    user: hermes
+    key: ~/.ssh/archive
+    tags:
+      - linux
+      - ethereum
+
+  pve01:
+    hostname: 10.0.0.2
+    user: hermes
+    proxyjump: jumpbox
+    tags:
+      - proxmox
+
+routers:
+  core:
+    hostname: 10.0.0.10
+    vendor: cisco
+
+switches:
+  sw01:
+    hostname: 10.0.0.20
+    vendor: cisco
+
+grafana:
+  url: https://grafana.lab.local
+  token: ${GRAFANA_TOKEN}
+
+proxmox:
+  url: https://pve.lab.local:8006
+  token: ${PROXMOX_TOKEN}

@@ -9,10 +9,11 @@ This file is the single progress log — updated after each completed feature, w
 |---|---|---|
 | Scaffold | go.mod, directory layout | done |
 | Scaffold | `internal/inventory` (YAML load, env-var secrets, validation) | done |
+| v0.1 | MCP server skeleton (`cmd/server`) + `list_servers` tool | done |
+| v0.1 | Example inventory config | done |
 | v0.1 | `internal/ssh` (client, connection pooling, exec) | in progress |
 | v0.1 | `internal/linux` (uptime, disk_usage, memory_usage parsers) | pending |
-| v0.1 | MCP server wiring + tools: list_servers, run_command, uptime, disk_usage, memory_usage | pending |
-| v0.1 | Example inventory config | pending |
+| v0.1 | Remaining tools: run_command, uptime, disk_usage, memory_usage | pending |
 | v0.1 | GitHub Actions CI | pending |
 | v0.2+ | Linux extended tools | not started |
 | v0.3+ | Docker | not started |
@@ -38,7 +39,16 @@ This file is the single progress log — updated after each completed feature, w
 - Lookup helpers: `Server(name)` (returns `ErrNotFound`), `ServerNames(tag)` (sorted, optionally tag-filtered).
 - Tests: `internal/inventory/loader_test.go`, 90.3% statement coverage. Covers: valid parse, missing env var, missing required field, unknown field rejection, malformed YAML, lookup hit/miss, tag filtering, file-not-found.
 
+### 2026-07-23 — MCP server skeleton + list_servers
+- Pulled the official Go SDK API from Context7 (`github.com/modelcontextprotocol/go-sdk`, pinned `v1.0.0`) before building against assumptions — registration pattern is `mcp.AddTool(server, &mcp.Tool{...}, handler)` with `In`/`Out` struct types driving JSON-schema inference.
+- `cmd/server/main.go`: loads inventory from `-inventory` flag (default `configs/inventory.yaml`), logs structured startup info via `slog` (JSON handler, stderr — stdout is reserved for the MCP stdio transport), runs the server over `mcp.StdioTransport{}`.
+- `mcp/tools/list_servers.go`: first MCP tool. Optional `tag` filter, returns name/hostname/tags only — no credentials ever leave the inventory layer.
+- `configs/inventory.example.yaml`: copy of the README's example inventory, safe to commit (secrets are `${ENV_VAR}` placeholders).
+- Verified end-to-end, not just "it compiles": `mcp/tools/list_servers_test.go` drives the tool through a real client/server pair over `mcp.NewInMemoryTransports()` (actual MCP protocol round-trip), and the built binary was smoke-tested as a subprocess with the example inventory. 88.9% coverage on `mcp/tools`.
+- Found and fixed a real bug during the smoke test: env-var expansion runs over raw YAML bytes before parsing, so a literal `${...}` inside a YAML *comment* also gets matched and required. Fixed by rewording the example file's comment; documented as a known limitation rather than special-cased in the expander (real inventories are unlikely to write `${...}` in comments).
+
 ## Decisions & Deviations from a literal README reading
 
 - **Module path**: used `infrastructure-mcp` (no VCS host) since this repo has no git remote configured yet. Rename in `go.mod` once the real module path (GitHub org/repo) is decided — this will require updating all internal import paths.
 - **Server auth validation**: not enforced at the inventory layer (see above); the SSH adapter is responsible for producing a clear error if a target ends up with no usable credential at connection time.
+- **Env-var expansion scope**: applied over raw file bytes before YAML parsing, so it also matches `${...}` inside comments. Documented rather than fixed with comment-stripping (adds complexity for a case unlikely to occur in real files).
