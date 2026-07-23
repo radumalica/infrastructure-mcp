@@ -14,11 +14,14 @@ import (
 )
 
 // buildAuthMethods derives the ssh.AuthMethod list for a target, in
-// preference order: explicit private key, explicit password, then a
-// running SSH agent as a fallback (covers proxyjump-only entries and
-// operators who prefer agent-based auth over inventory-embedded secrets).
+// preference order: explicit private key, explicit password, keyboard-
+// interactive using the same password, then a running SSH agent as a
+// fallback (covers proxyjump-only entries and operators who prefer
+// agent-based auth over inventory-embedded secrets).
 // Old network devices typically have no key at all and rely solely on
-// password auth here.
+// password auth here — and many of them (Cisco IOS and similar) only
+// offer the "keyboard-interactive" SSH auth method rather than "password",
+// so both are registered whenever a password is configured.
 func buildAuthMethods(t inventory.Target) ([]ssh.AuthMethod, error) {
 	var methods []ssh.AuthMethod
 
@@ -32,6 +35,7 @@ func buildAuthMethods(t inventory.Target) ([]ssh.AuthMethod, error) {
 
 	if t.Password != "" {
 		methods = append(methods, ssh.Password(t.Password))
+		methods = append(methods, ssh.KeyboardInteractive(passwordKeyboardInteractive(t.Password)))
 	}
 
 	if agentMethod, ok := agentAuthMethod(); ok {
@@ -43,6 +47,21 @@ func buildAuthMethods(t inventory.Target) ([]ssh.AuthMethod, error) {
 	}
 
 	return methods, nil
+}
+
+// passwordKeyboardInteractive answers every keyboard-interactive prompt
+// with password, regardless of the prompt text. This covers devices that
+// present a single "Password:" challenge over keyboard-interactive instead
+// of the SSH "password" method — answering by count rather than by
+// matching prompt wording keeps it working across vendors' varied prompts.
+func passwordKeyboardInteractive(password string) ssh.KeyboardInteractiveChallenge {
+	return func(_, _ string, questions []string, _ []bool) ([]string, error) {
+		answers := make([]string, len(questions))
+		for i := range answers {
+			answers[i] = password
+		}
+		return answers, nil
+	}
 }
 
 func loadPrivateKey(path string) (ssh.Signer, error) {

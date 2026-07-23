@@ -182,6 +182,39 @@ func TestPool_Run_NetworkDeviceSwitch(t *testing.T) {
 	}
 }
 
+func TestPool_Run_KeyboardInteractiveOnlyDevice(t *testing.T) {
+	srv := startFakeSSHServerKeyboardInteractive(t, map[string]commandOutcome{
+		"show version": {stdout: "IOS 12.4\n"},
+	})
+	host, portStr, err := net.SplitHostPort(srv.Addr)
+	if err != nil {
+		t.Fatalf("split host port: %v", err)
+	}
+	port, _ := strconv.Atoi(portStr)
+
+	inv := &inventory.Inventory{
+		Routers: map[string]inventory.NetworkDevice{
+			"old-router": {
+				Hostname: host,
+				Port:     port,
+				Vendor:   "cisco",
+				User:     srv.User,
+				Password: srv.Password,
+			},
+		},
+	}
+	pool := NewPool(inv, WithInsecureIgnoreHostKey())
+	defer pool.Close()
+
+	res, err := pool.Run(context.Background(), "old-router", "show version")
+	if err != nil {
+		t.Fatalf("Run failed against a keyboard-interactive-only server: %v", err)
+	}
+	if res.Stdout != "IOS 12.4\n" {
+		t.Errorf("unexpected stdout: %q", res.Stdout)
+	}
+}
+
 func TestPool_Run_RefusesTelnetOnlyTarget(t *testing.T) {
 	inv := &inventory.Inventory{
 		Routers: map[string]inventory.NetworkDevice{

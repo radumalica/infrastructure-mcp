@@ -23,11 +23,35 @@ routers:
   core:
     hostname: 10.0.0.10
     vendor: cisco
+    user: admin
+    password: ${CORE_ROUTER_PASSWORD}
+
+  # Old gear with no SSH server at all: reachable only via Telnet.
+  # Telnet devices are always user/password auth (no public keys).
+  legacy-edge:
+    hostname: 10.0.0.12
+    vendor: cisco
+    user: admin
+    password: ${LEGACY_EDGE_PASSWORD}
+    protocol: telnet
 
 switches:
   sw01:
     hostname: 10.0.0.20
     vendor: cisco
+    user: admin
+    password: ${SW01_PASSWORD}
+
+  # Old SSH stack that only speaks obsolete key exchange/cipher/MAC
+  # algorithms. legacy_crypto opts this one device into
+  # golang.org/x/crypto/ssh's InsecureAlgorithms() so the handshake can
+  # still succeed; every other target keeps the modern, secure defaults.
+  ancient-sw:
+    hostname: 10.0.0.21
+    vendor: cisco
+    user: admin
+    password: ${ANCIENT_SW_PASSWORD}
+    legacy_crypto: true
 
 grafana:
   url: https://grafana.lab.local

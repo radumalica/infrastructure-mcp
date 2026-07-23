@@ -30,6 +30,20 @@ type commandOutcome struct {
 
 func startFakeSSHServer(t *testing.T, outcomes map[string]commandOutcome) *fakeSSHServer {
 	t.Helper()
+	return startFakeSSHServerWithAuth(t, outcomes, false)
+}
+
+// startFakeSSHServerKeyboardInteractive starts a fake server that offers
+// only the "keyboard-interactive" SSH auth method, not "password" — the
+// way many old Cisco/network-vendor SSH stacks behave. It exercises the
+// ssh.KeyboardInteractive auth method registered in buildAuthMethods.
+func startFakeSSHServerKeyboardInteractive(t *testing.T, outcomes map[string]commandOutcome) *fakeSSHServer {
+	t.Helper()
+	return startFakeSSHServerWithAuth(t, outcomes, true)
+}
+
+func startFakeSSHServerWithAuth(t *testing.T, outcomes map[string]commandOutcome, keyboardInteractiveOnly bool) *fakeSSHServer {
+	t.Helper()
 
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -43,13 +57,25 @@ func startFakeSSHServer(t *testing.T, outcomes map[string]commandOutcome) *fakeS
 	const user = "testuser"
 	const password = "testpass"
 
-	config := &ssh.ServerConfig{
-		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
+	config := &ssh.ServerConfig{}
+	if keyboardInteractiveOnly {
+		config.KeyboardInteractiveCallback = func(c ssh.ConnMetadata, challenge ssh.KeyboardInteractiveChallenge) (*ssh.Permissions, error) {
+			answers, err := challenge("", "", []string{"Password: "}, []bool{false})
+			if err != nil {
+				return nil, err
+			}
+			if c.User() == user && len(answers) == 1 && answers[0] == password {
+				return nil, nil
+			}
+			return nil, errAuthFailed
+		}
+	} else {
+		config.PasswordCallback = func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
 			if c.User() == user && string(pass) == password {
 				return nil, nil
 			}
 			return nil, errAuthFailed
-		},
+		}
 	}
 	config.AddHostKey(signer)
 

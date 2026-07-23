@@ -12,7 +12,9 @@ import (
 
 	"infrastructure-mcp/internal/inventory"
 	"infrastructure-mcp/internal/linux"
+	"infrastructure-mcp/internal/remote"
 	"infrastructure-mcp/internal/ssh"
+	"infrastructure-mcp/internal/telnet"
 	"infrastructure-mcp/mcp/tools"
 )
 
@@ -54,8 +56,10 @@ func run() error {
 	}
 
 	sshPool := ssh.NewPool(inv, poolOpts...)
-	defer sshPool.Close()
-	linuxClient := linux.New(sshPool)
+	telnetPool := telnet.NewPool(inv)
+	remotePool := remote.NewPool(inv, sshPool, telnetPool)
+	defer remotePool.Close()
+	linuxClient := linux.New(remotePool)
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "infrastructure-mcp",
@@ -63,7 +67,7 @@ func run() error {
 	}, nil)
 
 	tools.RegisterListServers(server, logger, inv)
-	tools.RegisterRunCommand(server, logger, sshPool)
+	tools.RegisterRunCommand(server, logger, remotePool)
 	tools.RegisterUptime(server, logger, linuxClient)
 	tools.RegisterDiskUsage(server, logger, linuxClient)
 	tools.RegisterMemoryUsage(server, logger, linuxClient)
