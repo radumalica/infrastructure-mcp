@@ -37,9 +37,9 @@ type ServiceEndpoint struct {
 
 // Inventory is the root document loaded from the inventory YAML file.
 type Inventory struct {
-	Servers  map[string]Server         `yaml:"servers"`
-	Routers  map[string]NetworkDevice  `yaml:"routers"`
-	Switches map[string]NetworkDevice  `yaml:"switches"`
-	Grafana  *ServiceEndpoint          `yaml:"grafana"`
-	Proxmox  *ServiceEndpoint          `yaml:"proxmox"`
+	Servers  map[string]Server        `yaml:"servers"`
+	Routers  map[string]NetworkDevice `yaml:"routers"`
+	Switches map[string]NetworkDevice `yaml:"switches"`
+	Grafana  *ServiceEndpoint         `yaml:"grafana"`
+	Proxmox  *ServiceEndpoint         `yaml:"proxmox"`
 }

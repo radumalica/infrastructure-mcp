@@ -11,6 +11,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"infrastructure-mcp/internal/inventory"
+	"infrastructure-mcp/internal/linux"
+	"infrastructure-mcp/internal/ssh"
 	"infrastructure-mcp/mcp/tools"
 )
 
@@ -40,12 +42,20 @@ func run() error {
 		"switches", len(inv.Switches),
 	)
 
+	sshPool := ssh.NewPool(inv)
+	defer sshPool.Close()
+	linuxClient := linux.New(sshPool)
+
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "infrastructure-mcp",
 		Version: version,
 	}, nil)
 
 	tools.RegisterListServers(server, inv)
+	tools.RegisterRunCommand(server, sshPool)
+	tools.RegisterUptime(server, linuxClient)
+	tools.RegisterDiskUsage(server, linuxClient)
+	tools.RegisterMemoryUsage(server, linuxClient)
 
 	logger.Info("starting server", "transport", "stdio")
 	return server.Run(context.Background(), &mcp.StdioTransport{})

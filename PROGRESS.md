@@ -12,8 +12,8 @@ This file is the single progress log — updated after each completed feature, w
 | v0.1 | MCP server skeleton (`cmd/server`) + `list_servers` tool | done |
 | v0.1 | Example inventory config | done |
 | v0.1 | `internal/ssh` (client, connection pooling, exec) | done |
-| v0.1 | `internal/linux` (uptime, disk_usage, memory_usage parsers) | pending |
-| v0.1 | Remaining tools: run_command, uptime, disk_usage, memory_usage | pending |
+| v0.1 | `internal/linux` (uptime, disk_usage, memory_usage parsers) | done |
+| v0.1 | Remaining tools: run_command, uptime, disk_usage, memory_usage | done |
 | v0.1 | GitHub Actions CI | pending |
 | v0.2+ | Linux extended tools | not started |
 | v0.3+ | Docker | not started |
@@ -54,6 +54,14 @@ This file is the single progress log — updated after each completed feature, w
 - Host key verification is **fail-closed by default**: connects fail with `ErrNoHostKeyVerification` unless the target is in `known_hosts` (default `~/.ssh/known_hosts`, overridable) or `WithInsecureIgnoreHostKey()` was explicitly passed (lab/dev opt-in only, never the default).
 - Context cancellation is honored mid-command (`ssh.SIGKILL` sent to the remote process, `ctx.Err()` returned) rather than only before dialing.
 - Tests exercise a real network path: `testserver_test.go` runs a minimal in-process SSH server (ed25519 host key, password auth, exec channel) so `pool_test.go` drives actual TCP + SSH handshake + command exec/exit-status round trips — not mocked. This avoids a Docker/Testcontainers dependency for what is fundamentally client-logic testing; Testcontainers-based integration tests (per README) are still the right tool for later multi-service scenarios (Docker, Kubernetes, Grafana). 81.2% coverage.
+
+### 2026-07-23 — internal/linux + remaining v0.1 tools
+- `internal/linux`: `Client` depends on a small `Runner` interface (`Run(ctx, server, command) (ssh.Result, error)`) rather than a concrete `*ssh.Pool`, so parsing logic is unit-tested without any network dependency. Commands used are portable across distros: `cat /proc/uptime /proc/loadavg` (uptime/load), `df -kP` (POSIX-mode disk usage, immune to line-wrapping on long device names), `cat /proc/meminfo` (memory, preferring kernel-reported `MemAvailable` and falling back to `Free+Buffers+Cached` on older kernels that lack it).
+- `mcp/tools`: added `run_command` (thin pass-through to `ssh.Pool.Run`, exposes `CommandRunner` interface), `uptime`, `disk_usage`, `memory_usage` (all three share a `LinuxDiagnostics` interface satisfied by `*linux.Client`).
+- Severity/recommendation logic (per the README's `check_disk()`-style tool design example) lives at the tool layer, not in `internal/linux`: `disk_usage` warns at 75% used / critical at 90%, `memory_usage` warns at 85% / critical at 95%. Thresholds are named constants in `mcp/tools/{disk_usage,memory_usage}.go`; shared via `severity.go`.
+- `cmd/server/main.go` now wires the full v0.1 dependency graph: inventory → `ssh.Pool` → `linux.Client` → all five tools.
+- All new tools verified through the real MCP protocol (`mcp.NewInMemoryTransports()`), including a table-driven test of each disk/memory severity threshold. 86.8% coverage on `mcp/tools`, 87.4% on `internal/linux`.
+- **v0.1's tool surface (`list_servers`, `run_command`, `uptime`, `disk_usage`, `memory_usage`) is now complete.** Only GitHub Actions CI remains before v0.1 is fully done.
 
 ## Decisions & Deviations from a literal README reading
 
