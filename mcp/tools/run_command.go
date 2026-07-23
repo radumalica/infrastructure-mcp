@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -14,6 +15,9 @@ type RunCommandInput struct {
 	Server  string `json:"server" jsonschema:"the inventory server name to run the command on"`
 	Command string `json:"command" jsonschema:"the shell command to execute on the target"`
 }
+
+// TargetServer implements Targeted.
+func (in RunCommandInput) TargetServer() string { return in.Server }
 
 // RunCommandOutput is the result of executing a command on a server.
 type RunCommandOutput struct {
@@ -34,14 +38,14 @@ type CommandRunner interface {
 
 // RegisterRunCommand adds the run_command tool to server. runner executes
 // commands against inventory servers (normally an *ssh.Pool).
-func RegisterRunCommand(server *mcp.Server, runner CommandRunner) {
+func RegisterRunCommand(server *mcp.Server, logger *slog.Logger, runner CommandRunner) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "run_command",
 		Description: "Run a shell command on an inventory server over SSH and return its output, exit code, and duration.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in RunCommandInput) (*mcp.CallToolResult, RunCommandOutput, error) {
+	}, withLogging(logger, "run_command", func(ctx context.Context, req *mcp.CallToolRequest, in RunCommandInput) (*mcp.CallToolResult, RunCommandOutput, error) {
 		res, err := runner.Run(ctx, in.Server, in.Command)
 		if err != nil {
-			return nil, RunCommandOutput{}, err
+			return nil, RunCommandOutput{}, wrapErr(err)
 		}
 		return nil, RunCommandOutput{
 			Server:     in.Server,
@@ -52,5 +56,5 @@ func RegisterRunCommand(server *mcp.Server, runner CommandRunner) {
 			DurationMs: res.Duration.Milliseconds(),
 			Timestamp:  time.Now().UTC().Format(time.RFC3339),
 		}, nil
-	})
+	}))
 }

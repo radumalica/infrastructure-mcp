@@ -27,6 +27,8 @@ func main() {
 
 func run() error {
 	inventoryPath := flag.String("inventory", "configs/inventory.yaml", "path to the inventory YAML file")
+	knownHostsPath := flag.String("known-hosts", "", "path to the SSH known_hosts file used to verify target host keys (default: $HOME/.ssh/known_hosts)")
+	insecureHostKey := flag.Bool("insecure-ignore-host-key", false, "skip SSH host key verification entirely (lab/dev use only, never for production infrastructure)")
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
@@ -42,7 +44,16 @@ func run() error {
 		"switches", len(inv.Switches),
 	)
 
-	sshPool := ssh.NewPool(inv)
+	var poolOpts []ssh.PoolOption
+	if *knownHostsPath != "" {
+		poolOpts = append(poolOpts, ssh.WithKnownHostsPath(*knownHostsPath))
+	}
+	if *insecureHostKey {
+		logger.Warn("SSH host key verification disabled (-insecure-ignore-host-key); do not use against production infrastructure")
+		poolOpts = append(poolOpts, ssh.WithInsecureIgnoreHostKey())
+	}
+
+	sshPool := ssh.NewPool(inv, poolOpts...)
 	defer sshPool.Close()
 	linuxClient := linux.New(sshPool)
 
@@ -51,11 +62,11 @@ func run() error {
 		Version: version,
 	}, nil)
 
-	tools.RegisterListServers(server, inv)
-	tools.RegisterRunCommand(server, sshPool)
-	tools.RegisterUptime(server, linuxClient)
-	tools.RegisterDiskUsage(server, linuxClient)
-	tools.RegisterMemoryUsage(server, linuxClient)
+	tools.RegisterListServers(server, logger, inv)
+	tools.RegisterRunCommand(server, logger, sshPool)
+	tools.RegisterUptime(server, logger, linuxClient)
+	tools.RegisterDiskUsage(server, logger, linuxClient)
+	tools.RegisterMemoryUsage(server, logger, linuxClient)
 
 	logger.Info("starting server", "transport", "stdio")
 	return server.Run(context.Background(), &mcp.StdioTransport{})

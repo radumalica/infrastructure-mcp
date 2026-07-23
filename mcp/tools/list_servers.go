@@ -6,6 +6,7 @@ package tools
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -15,6 +16,15 @@ import (
 // ListServersInput filters the servers returned by list_servers.
 type ListServersInput struct {
 	Tag string `json:"tag,omitempty" jsonschema:"only return servers carrying this tag; omit to return all servers"`
+}
+
+// TargetServer implements Targeted. list_servers targets a set rather
+// than a single server, so it reports the tag filter (or "*" for all).
+func (in ListServersInput) TargetServer() string {
+	if in.Tag == "" {
+		return "*"
+	}
+	return in.Tag
 }
 
 // ServerSummary is the public, credential-free view of an inventory server.
@@ -31,11 +41,11 @@ type ListServersOutput struct {
 
 // RegisterListServers adds the list_servers tool to server. inv is the
 // loaded inventory to enumerate.
-func RegisterListServers(server *mcp.Server, inv *inventory.Inventory) {
+func RegisterListServers(server *mcp.Server, logger *slog.Logger, inv *inventory.Inventory) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_servers",
 		Description: "List servers known to the inventory, optionally filtered by tag. Never returns credentials.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in ListServersInput) (*mcp.CallToolResult, ListServersOutput, error) {
+	}, withLogging(logger, "list_servers", func(ctx context.Context, req *mcp.CallToolRequest, in ListServersInput) (*mcp.CallToolResult, ListServersOutput, error) {
 		names := inv.ServerNames(in.Tag)
 		summaries := make([]ServerSummary, 0, len(names))
 		for _, name := range names {
@@ -44,7 +54,7 @@ func RegisterListServers(server *mcp.Server, inv *inventory.Inventory) {
 				// Inventory is read-only after load; a name returned by
 				// ServerNames is guaranteed to resolve. Treat divergence
 				// as a programming error rather than a user-facing one.
-				return nil, ListServersOutput{}, err
+				return nil, ListServersOutput{}, wrapErr(err)
 			}
 			summaries = append(summaries, ServerSummary{
 				Name:     name,
@@ -53,5 +63,5 @@ func RegisterListServers(server *mcp.Server, inv *inventory.Inventory) {
 			})
 		}
 		return nil, ListServersOutput{Servers: summaries}, nil
-	})
+	}))
 }

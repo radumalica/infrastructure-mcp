@@ -33,7 +33,7 @@ func newTestSession(t *testing.T, inv *inventory.Inventory) (*mcp.ClientSession,
 	ctx := context.Background()
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "test-server", Version: "test"}, nil)
-	RegisterListServers(server, inv)
+	RegisterListServers(server, testLogger(), inv)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 

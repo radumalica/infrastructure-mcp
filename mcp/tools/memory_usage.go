@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -16,6 +17,9 @@ const (
 type MemoryUsageInput struct {
 	Server string `json:"server" jsonschema:"the inventory server name to check"`
 }
+
+// TargetServer implements Targeted.
+func (in MemoryUsageInput) TargetServer() string { return in.Server }
 
 // MemoryUsageOutput is the result of memory_usage.
 type MemoryUsageOutput struct {
@@ -32,14 +36,14 @@ type MemoryUsageOutput struct {
 }
 
 // RegisterMemoryUsage adds the memory_usage tool to server.
-func RegisterMemoryUsage(server *mcp.Server, diag LinuxDiagnostics) {
+func RegisterMemoryUsage(server *mcp.Server, logger *slog.Logger, diag LinuxDiagnostics) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "memory_usage",
 		Description: "Report memory usage on a Linux server, with a warning/critical severity and recommendation when memory is running low.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in MemoryUsageInput) (*mcp.CallToolResult, MemoryUsageOutput, error) {
+	}, withLogging(logger, "memory_usage", func(ctx context.Context, req *mcp.CallToolRequest, in MemoryUsageInput) (*mcp.CallToolResult, MemoryUsageOutput, error) {
 		mem, err := diag.MemoryUsage(ctx, in.Server)
 		if err != nil {
-			return nil, MemoryUsageOutput{}, err
+			return nil, MemoryUsageOutput{}, wrapErr(err)
 		}
 
 		status, recommendation := severityForPercent(mem.UsedPercent, memoryWarnPercent, memoryCritPercent, "memory")
@@ -56,5 +60,5 @@ func RegisterMemoryUsage(server *mcp.Server, diag LinuxDiagnostics) {
 			Recommendation: recommendation,
 			Timestamp:      time.Now().UTC().Format(time.RFC3339),
 		}, nil
-	})
+	}))
 }

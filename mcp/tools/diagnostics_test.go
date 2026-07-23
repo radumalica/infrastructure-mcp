@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -16,6 +17,13 @@ type fakeDiagnostics struct {
 	disks  []linux.DiskUsage
 	memory linux.MemoryUsage
 	err    error
+}
+
+type structuredToolError struct {
+	Message        string `json:"message"`
+	Recommendation string `json:"recommendation"`
+	Retryable      bool   `json:"retryable"`
+	Category       string `json:"category"`
 }
 
 func (f *fakeDiagnostics) Uptime(context.Context, string) (linux.UptimeInfo, error) {
@@ -33,9 +41,9 @@ func newDiagnosticsSession(t *testing.T, diag *fakeDiagnostics) *mcp.ClientSessi
 	ctx := context.Background()
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "test-server", Version: "test"}, nil)
-	RegisterUptime(server, diag)
-	RegisterDiskUsage(server, diag)
-	RegisterMemoryUsage(server, diag)
+	RegisterUptime(server, testLogger(), diag)
+	RegisterDiskUsage(server, testLogger(), diag)
+	RegisterMemoryUsage(server, testLogger(), diag)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	go func() { _, _ = server.Connect(ctx, serverTransport, nil) }()
@@ -154,6 +162,51 @@ func TestMemoryUsage_SeverityLevels(t *testing.T) {
 			}
 			if out.Status != tt.wantStatus {
 				t.Errorf("status = %q, want %q", out.Status, tt.wantStatus)
+			}
+		})
+	}
+}
+
+// TestDiagnosticsTools_ErrorPath verifies that a failure from the
+// diagnostics layer reaches the client as the structured
+// message/recommendation/retryable/category envelope required by
+// README.md's Error Handling section, not a raw Go error string.
+func TestDiagnosticsTools_ErrorPath(t *testing.T) {
+	underlying := errors.New("ssh: dial archive: connection refused")
+	diag := &fakeDiagnostics{err: underlying}
+	session := newDiagnosticsSession(t, diag)
+	ctx := context.Background()
+
+	tools := []string{"uptime", "disk_usage", "memory_usage"}
+	for _, name := range tools {
+		t.Run(name, func(t *testing.T) {
+			result, err := session.CallTool(ctx, &mcp.CallToolParams{
+				Name:      name,
+				Arguments: map[string]any{"server": "archive"},
+			})
+			if err != nil {
+				t.Fatalf("CallTool transport error: %v", err)
+			}
+			if !result.IsError {
+				t.Fatal("expected IsError=true for a failing diagnostics call")
+			}
+			if len(result.Content) == 0 {
+				t.Fatal("expected error content")
+			}
+			text, ok := result.Content[0].(*mcp.TextContent)
+			if !ok {
+				t.Fatalf("expected TextContent, got %T", result.Content[0])
+			}
+
+			var envelope structuredToolError
+			if err := json.Unmarshal([]byte(text.Text), &envelope); err != nil {
+				t.Fatalf("error content is not the structured JSON envelope: %v (%s)", err, text.Text)
+			}
+			if envelope.Category == "" {
+				t.Error("expected non-empty category")
+			}
+			if envelope.Message == "" {
+				t.Error("expected non-empty message")
 			}
 		})
 	}

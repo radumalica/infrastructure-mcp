@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -13,6 +14,9 @@ import (
 type UptimeInput struct {
 	Server string `json:"server" jsonschema:"the inventory server name to check"`
 }
+
+// TargetServer implements Targeted.
+func (in UptimeInput) TargetServer() string { return in.Server }
 
 // UptimeOutput reports how long a server has been up and its load.
 type UptimeOutput struct {
@@ -32,14 +36,14 @@ type LinuxDiagnostics interface {
 }
 
 // RegisterUptime adds the uptime tool to server.
-func RegisterUptime(server *mcp.Server, diag LinuxDiagnostics) {
+func RegisterUptime(server *mcp.Server, logger *slog.Logger, diag LinuxDiagnostics) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "uptime",
 		Description: "Report how long a Linux server has been running and its 1/5/15-minute load averages.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in UptimeInput) (*mcp.CallToolResult, UptimeOutput, error) {
+	}, withLogging(logger, "uptime", func(ctx context.Context, req *mcp.CallToolRequest, in UptimeInput) (*mcp.CallToolResult, UptimeOutput, error) {
 		info, err := diag.Uptime(ctx, in.Server)
 		if err != nil {
-			return nil, UptimeOutput{}, err
+			return nil, UptimeOutput{}, wrapErr(err)
 		}
 		return nil, UptimeOutput{
 			Server:        in.Server,
@@ -49,5 +53,5 @@ func RegisterUptime(server *mcp.Server, diag LinuxDiagnostics) {
 			Load15:        info.Load15,
 			Timestamp:     time.Now().UTC().Format(time.RFC3339),
 		}, nil
-	})
+	}))
 }

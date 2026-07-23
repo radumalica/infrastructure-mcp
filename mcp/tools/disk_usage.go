@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -16,6 +17,9 @@ const (
 type DiskUsageInput struct {
 	Server string `json:"server" jsonschema:"the inventory server name to check"`
 }
+
+// TargetServer implements Targeted.
+func (in DiskUsageInput) TargetServer() string { return in.Server }
 
 // DiskUsageEntry reports usage and severity for one mounted filesystem.
 type DiskUsageEntry struct {
@@ -37,14 +41,14 @@ type DiskUsageOutput struct {
 }
 
 // RegisterDiskUsage adds the disk_usage tool to server.
-func RegisterDiskUsage(server *mcp.Server, diag LinuxDiagnostics) {
+func RegisterDiskUsage(server *mcp.Server, logger *slog.Logger, diag LinuxDiagnostics) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "disk_usage",
 		Description: "Report per-filesystem disk usage on a Linux server, with a warning/critical severity and recommendation for filesystems running low on space.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in DiskUsageInput) (*mcp.CallToolResult, DiskUsageOutput, error) {
+	}, withLogging(logger, "disk_usage", func(ctx context.Context, req *mcp.CallToolRequest, in DiskUsageInput) (*mcp.CallToolResult, DiskUsageOutput, error) {
 		disks, err := diag.DiskUsage(ctx, in.Server)
 		if err != nil {
-			return nil, DiskUsageOutput{}, err
+			return nil, DiskUsageOutput{}, wrapErr(err)
 		}
 
 		entries := make([]DiskUsageEntry, 0, len(disks))
@@ -67,5 +71,5 @@ func RegisterDiskUsage(server *mcp.Server, diag LinuxDiagnostics) {
 			Filesystems: entries,
 			Timestamp:   time.Now().UTC().Format(time.RFC3339),
 		}, nil
-	})
+	}))
 }
