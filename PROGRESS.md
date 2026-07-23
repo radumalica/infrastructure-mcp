@@ -16,6 +16,7 @@ This file is the single progress log — updated after each completed feature, w
 | v0.1 | Remaining tools: run_command, uptime, disk_usage, memory_usage | done |
 | v0.1 | GitHub Actions CI | done |
 | **v0.1** | **Core infrastructure — complete** | **done** |
+| pre-v0.7 | Legacy network device connectivity (SSH legacy crypto, Telnet transport) — user request, ahead of v0.7 schedule | in progress |
 | v0.2+ | Linux extended tools | not started |
 | v0.3+ | Docker | not started |
 | v0.4+ | Kubernetes | not started |
@@ -77,6 +78,15 @@ Flagged by an advisor review before declaring v0.1 done: the tool surface worked
 - All 5 `RegisterX` functions now take `*slog.Logger` and route handler errors through `wrapErr` (→ `toolerr.Wrap`) instead of returning raw Go errors.
 - `cmd/server`: exposes `-known-hosts` and `-insecure-ignore-host-key` flags so the `ssh.Pool`'s already-implemented (but previously unreachable) `PoolOption`s are actually usable without editing code — needed for the binary to be runnable against lab/dev targets that aren't in `~/.ssh/known_hosts`.
 - New tests specifically target the previously-untested error path: `internal/toolerr/toolerr_test.go` (classification table), `mcp/tools/diagnostics_test.go::TestDiagnosticsTools_ErrorPath` and `mcp/tools/run_command_test.go::TestRunCommand_ErrorPath_ReturnsStructuredEnvelope` (assert the *actual JSON on the wire* through the real MCP protocol is the structured envelope, not an error string), `mcp/tools/logging_test.go` (captures real `slog.Record`s from a live tool call and asserts on tool/user/target/result fields).
+
+### 2026-07-23 — Legacy network device connectivity, part 1: inventory.Target + SSH legacy crypto
+User request: many older switches/routers in the target environment have obsolete SSH crypto stacks (or no SSH at all — Telnet only), and none support public-key auth. Building this ahead of the v0.7 (Networking) schedule since it's foundational transport work, not vendor-specific tooling.
+
+- `internal/inventory`: `NetworkDevice` gains `Port`, `ProxyJump`, `Protocol` (`ssh`|`telnet`, default `ssh`, validated), and `LegacyCrypto` (bool, opt-in per device, never a default). New `Target` type + `(inv *Inventory) Target(name)` unifies lookup across servers/routers/switches into one connection-level shape, so the transport layer doesn't care which inventory category a name came from. Ambiguous names (same name in two categories) are rejected with `ErrAmbiguousTarget` rather than silently picking one.
+- `internal/ssh`: `Pool.dial` now resolves via `inv.Target()` instead of `inv.Server()` — this is what let routers/switches (not just Linux servers) reuse the entire existing pooling/proxyjump/host-key machinery for free. A target explicitly configured for `protocol: telnet` is rejected with a clear error if something tries to run it through `ssh.Pool` directly (the real dispatch happens one layer up — see below). New `applyLegacyCrypto()` widens the negotiated key exchange/cipher/MAC/host-key algorithm sets using `golang.org/x/crypto/ssh`'s `InsecureAlgorithms()`, additively (never replacing the modern defaults) and only when `Target.LegacyCrypto` is true — verified this API exists via `go doc` on the actual installed module rather than assuming.
+- Backward compatible by construction: existing `Server`-only inventories and all prior `ssh` package tests pass unchanged, since `Target()` for a `Servers` entry reproduces exactly the old `Server`-based behavior (protocol implicitly ssh, `LegacyCrypto` false).
+- Tests: `internal/inventory/target_test.go` (resolution across all 3 categories, ambiguity, default protocol, invalid protocol validation), `internal/ssh/legacy_test.go` (algorithm widening, non-mutation of package globals), `internal/ssh/pool_test.go` additions (a `Switches`-sourced target with `LegacyCrypto: true` dials successfully through the fake SSH server; a `telnet`-protocol target is refused by `ssh.Pool.Run`).
+- **Still to come in this feature**: `internal/telnet` (new transport for devices with no SSH at all) and `internal/remote` (thin composer that picks SSH vs Telnet per target's `Protocol`, so `mcp/tools`/`internal/linux` keep using the same `Run(ctx, target, command)` shape they already do).
 
 ## Decisions & Deviations from a literal README reading
 

@@ -149,3 +149,56 @@ func TestPool_Close_Idempotent(t *testing.T) {
 		t.Fatalf("second close should be a no-op, got: %v", err)
 	}
 }
+
+func TestPool_Run_NetworkDeviceSwitch(t *testing.T) {
+	srv := startFakeSSHServer(t, map[string]commandOutcome{"show version": {stdout: "IOS 15.2\n"}})
+	host, portStr, err := net.SplitHostPort(srv.Addr)
+	if err != nil {
+		t.Fatalf("split host port: %v", err)
+	}
+	port, _ := strconv.Atoi(portStr)
+
+	inv := &inventory.Inventory{
+		Switches: map[string]inventory.NetworkDevice{
+			"old-switch": {
+				Hostname:     host,
+				Port:         port,
+				Vendor:       "cisco",
+				User:         srv.User,
+				Password:     srv.Password,
+				LegacyCrypto: true,
+			},
+		},
+	}
+	pool := NewPool(inv, WithInsecureIgnoreHostKey())
+	defer pool.Close()
+
+	res, err := pool.Run(context.Background(), "old-switch", "show version")
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if res.Stdout != "IOS 15.2\n" {
+		t.Errorf("unexpected stdout: %q", res.Stdout)
+	}
+}
+
+func TestPool_Run_RefusesTelnetOnlyTarget(t *testing.T) {
+	inv := &inventory.Inventory{
+		Routers: map[string]inventory.NetworkDevice{
+			"telnet-only": {
+				Hostname: "10.0.0.1",
+				Vendor:   "cisco",
+				User:     "admin",
+				Password: "admin",
+				Protocol: "telnet",
+			},
+		},
+	}
+	pool := NewPool(inv)
+	defer pool.Close()
+
+	_, err := pool.Run(context.Background(), "telnet-only", "show version")
+	if err == nil {
+		t.Fatal("expected an error: ssh.Pool must refuse a telnet-only target rather than silently misdialing")
+	}
+}

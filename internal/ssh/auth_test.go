@@ -33,8 +33,8 @@ func writeTestPrivateKey(t *testing.T, dir string) string {
 
 func TestBuildAuthMethods_KeyOnly(t *testing.T) {
 	keyPath := writeTestPrivateKey(t, t.TempDir())
-	s := inventory.Server{Hostname: "10.0.0.1", User: "hermes", Key: keyPath}
-	methods, err := buildAuthMethods(s)
+	target := inventory.Target{Hostname: "10.0.0.1", User: "hermes", Key: keyPath}
+	methods, err := buildAuthMethods(target)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -44,8 +44,8 @@ func TestBuildAuthMethods_KeyOnly(t *testing.T) {
 }
 
 func TestBuildAuthMethods_PasswordOnly(t *testing.T) {
-	s := inventory.Server{Hostname: "10.0.0.1", User: "hermes", Password: "secret"}
-	methods, err := buildAuthMethods(s)
+	target := inventory.Target{Hostname: "10.0.0.1", User: "hermes", Password: "secret"}
+	methods, err := buildAuthMethods(target)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -55,8 +55,8 @@ func TestBuildAuthMethods_PasswordOnly(t *testing.T) {
 }
 
 func TestBuildAuthMethods_MissingKeyFile(t *testing.T) {
-	s := inventory.Server{Hostname: "10.0.0.1", User: "hermes", Key: "/nonexistent/key"}
-	_, err := buildAuthMethods(s)
+	target := inventory.Target{Hostname: "10.0.0.1", User: "hermes", Key: "/nonexistent/key"}
+	_, err := buildAuthMethods(target)
 	if err == nil {
 		t.Fatal("expected error for missing key file")
 	}
@@ -64,8 +64,8 @@ func TestBuildAuthMethods_MissingKeyFile(t *testing.T) {
 
 func TestBuildAuthMethods_NoCredentialsNoAgent(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", "")
-	s := inventory.Server{Hostname: "10.0.0.1", User: "hermes"}
-	_, err := buildAuthMethods(s)
+	target := inventory.Target{Hostname: "10.0.0.1", User: "hermes"}
+	_, err := buildAuthMethods(target)
 	if !errors.Is(err, ErrNoCredentials) {
 		t.Errorf("expected ErrNoCredentials, got %v", err)
 	}

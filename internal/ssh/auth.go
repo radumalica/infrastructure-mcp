@@ -13,23 +13,25 @@ import (
 	"infrastructure-mcp/internal/inventory"
 )
 
-// buildAuthMethods derives the ssh.AuthMethod list for a server, in
+// buildAuthMethods derives the ssh.AuthMethod list for a target, in
 // preference order: explicit private key, explicit password, then a
 // running SSH agent as a fallback (covers proxyjump-only entries and
 // operators who prefer agent-based auth over inventory-embedded secrets).
-func buildAuthMethods(s inventory.Server) ([]ssh.AuthMethod, error) {
+// Old network devices typically have no key at all and rely solely on
+// password auth here.
+func buildAuthMethods(t inventory.Target) ([]ssh.AuthMethod, error) {
 	var methods []ssh.AuthMethod
 
-	if s.Key != "" {
-		signer, err := loadPrivateKey(s.Key)
+	if t.Key != "" {
+		signer, err := loadPrivateKey(t.Key)
 		if err != nil {
-			return nil, fmt.Errorf("ssh: load key %q: %w", s.Key, err)
+			return nil, fmt.Errorf("ssh: load key %q: %w", t.Key, err)
 		}
 		methods = append(methods, ssh.PublicKeys(signer))
 	}
 
-	if s.Password != "" {
-		methods = append(methods, ssh.Password(s.Password))
+	if t.Password != "" {
+		methods = append(methods, ssh.Password(t.Password))
 	}
 
 	if agentMethod, ok := agentAuthMethod(); ok {

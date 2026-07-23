@@ -152,9 +152,12 @@ func (p *Pool) dial(ctx context.Context, serverName string, visiting map[string]
 	}
 	visiting[serverName] = true
 
-	target, err := p.inv.Server(serverName)
+	target, err := p.inv.Target(serverName)
 	if err != nil {
 		return nil, err
+	}
+	if target.Protocol == inventory.ProtocolTelnet {
+		return nil, fmt.Errorf("ssh: %q is configured for telnet, not ssh (use internal/remote to dispatch by protocol)", serverName)
 	}
 
 	config, err := p.clientConfig(target)
@@ -192,8 +195,8 @@ func newClientFromConn(conn net.Conn, addr string, config *ssh.ClientConfig) (*s
 	return ssh.NewClient(sshConn, chans, reqs), nil
 }
 
-func (p *Pool) clientConfig(s inventory.Server) (*ssh.ClientConfig, error) {
-	auth, err := buildAuthMethods(s)
+func (p *Pool) clientConfig(t inventory.Target) (*ssh.ClientConfig, error) {
+	auth, err := buildAuthMethods(t)
 	if err != nil {
 		return nil, err
 	}
@@ -201,12 +204,16 @@ func (p *Pool) clientConfig(s inventory.Server) (*ssh.ClientConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ssh.ClientConfig{
-		User:            s.User,
+	cfg := &ssh.ClientConfig{
+		User:            t.User,
 		Auth:            auth,
 		HostKeyCallback: hostKeyCallback,
 		Timeout:         p.dialTimeout,
-	}, nil
+	}
+	if t.LegacyCrypto {
+		applyLegacyCrypto(cfg)
+	}
+	return cfg, nil
 }
 
 func portOrDefault(port int) string {
