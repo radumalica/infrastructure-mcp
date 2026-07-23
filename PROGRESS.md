@@ -11,7 +11,7 @@ This file is the single progress log — updated after each completed feature, w
 | Scaffold | `internal/inventory` (YAML load, env-var secrets, validation) | done |
 | v0.1 | MCP server skeleton (`cmd/server`) + `list_servers` tool | done |
 | v0.1 | Example inventory config | done |
-| v0.1 | `internal/ssh` (client, connection pooling, exec) | in progress |
+| v0.1 | `internal/ssh` (client, connection pooling, exec) | done |
 | v0.1 | `internal/linux` (uptime, disk_usage, memory_usage parsers) | pending |
 | v0.1 | Remaining tools: run_command, uptime, disk_usage, memory_usage | pending |
 | v0.1 | GitHub Actions CI | pending |
@@ -46,6 +46,14 @@ This file is the single progress log — updated after each completed feature, w
 - `configs/inventory.example.yaml`: copy of the README's example inventory, safe to commit (secrets are `${ENV_VAR}` placeholders).
 - Verified end-to-end, not just "it compiles": `mcp/tools/list_servers_test.go` drives the tool through a real client/server pair over `mcp.NewInMemoryTransports()` (actual MCP protocol round-trip), and the built binary was smoke-tested as a subprocess with the example inventory. 88.9% coverage on `mcp/tools`.
 - Found and fixed a real bug during the smoke test: env-var expansion runs over raw YAML bytes before parsing, so a literal `${...}` inside a YAML *comment* also gets matched and required. Fixed by rewording the example file's comment; documented as a known limitation rather than special-cased in the expander (real inventories are unlikely to write `${...}` in comments).
+
+### 2026-07-23 — internal/ssh
+- `Pool`: connection cache keyed by inventory server name (`map[string]*ssh.Client`, mutex-guarded), `Run(ctx, server, command)` returning stdout/stderr/exit code/duration, `Close()`.
+- Auth precedence: explicit key → explicit password → running SSH agent (`SSH_AUTH_SOCK`) → `ErrNoCredentials`. Matches the inventory-layer decision to not require key/password (see below).
+- ProxyJump is resolved recursively (`Pool.dial`), reusing the proxy's already-pooled connection when present, with cycle detection so a misconfigured inventory can't hang the server.
+- Host key verification is **fail-closed by default**: connects fail with `ErrNoHostKeyVerification` unless the target is in `known_hosts` (default `~/.ssh/known_hosts`, overridable) or `WithInsecureIgnoreHostKey()` was explicitly passed (lab/dev opt-in only, never the default).
+- Context cancellation is honored mid-command (`ssh.SIGKILL` sent to the remote process, `ctx.Err()` returned) rather than only before dialing.
+- Tests exercise a real network path: `testserver_test.go` runs a minimal in-process SSH server (ed25519 host key, password auth, exec channel) so `pool_test.go` drives actual TCP + SSH handshake + command exec/exit-status round trips — not mocked. This avoids a Docker/Testcontainers dependency for what is fundamentally client-logic testing; Testcontainers-based integration tests (per README) are still the right tool for later multi-service scenarios (Docker, Kubernetes, Grafana). 81.2% coverage.
 
 ## Decisions & Deviations from a literal README reading
 
