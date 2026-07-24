@@ -29,6 +29,16 @@ This file is the single progress log — updated after each completed feature, w
 
 ## Log
 
+### 2026-07-24 — README overhaul into a professional OSS README + LICENSE
+User request: turn the original "Technical Architecture & Development Plan" doc into a proper open-source README, while keeping its structure and content.
+- Restructured `README.md` around standard OSS sections (Why, Goals/Non-Goals, Architecture, **Current Features**, Installation, Configuration, Connecting an AI Agent, Tool Design Philosophy, Security, Development, **Roadmap**, Contributing, License, and a closing note on how the project is built) while preserving all of the original technical content (architecture diagram, tech stack, project structure, inventory example, tool design rules, logging/error-handling/security sections, performance goals, Claude Code development rules).
+- Added a **Current Features** section listing every tool actually shipped so far (v0.1 core, v0.2 Linux, v0.3 Docker, plus the cross-cutting legacy-device/error-contract/logging work), sourced from this file's own status table rather than re-derived — this file is the record of what's actually done.
+- The old flat "# Version 0.x" headers (which mixed done and not-done versions with no distinction) are replaced by a **Roadmap** section that only lists what's `not started` per this file's status table (v0.4 Kubernetes through v1.0 and beyond) plus the "Further out" list. Going forward, per explicit user instruction: **every time a feature ships, its tools move out of the Roadmap section and into Current Features in the same commit that updates this file's status table** — this file, memory, and README are kept in lockstep, not just this file and git history.
+- Added `LICENSE` (MIT) and a "License" section — explicitly free to use, including commercially.
+- Added a "A Note on How This Project Is Built" section per user request: implementation is AI-authored (vibe-coded, Claude Code), but design/architecture/roadmap decisions are human-authored by the repo owner.
+- Added Installation, Configuration, and "Connecting an AI Agent" sections that didn't exist before (build from source, `-inventory`/`-known-hosts`/`-insecure-ignore-host-key` flags, example `claude_desktop_config.json` MCP client wiring) and a Contributing section describing the expected package/adapter/test pattern for new contributions.
+- No code changes; `go build ./... && go vet ./... && go test ./...` unaffected.
+
 ### 2026-07-23 — Scaffold
 - `go mod init infrastructure-mcp` (module path is a placeholder; no GitHub remote exists yet — update once the real repo location is known).
 - Created directory layout per README: `cmd/server`, `internal/{inventory,ssh,linux}`, `mcp/{tools,prompts,resources}`, `configs`, `docs`, `examples`, `scripts`, `tests`.
