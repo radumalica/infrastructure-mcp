@@ -180,7 +180,7 @@ Tools implemented and tested against the real MCP protocol so far:
 - Structured error contract on every tool (`message`, `recommendation`, `retryable`, `category`)
 - Structured per-execution logging (`tool`, `user`, `target`, `duration`, `result`, `error`)
 - Host-key verification fail-closed by default, with explicit opt-outs for lab use
-- Dual MCP transport: stdio (local subprocess clients) and Streamable HTTP (remote clients), from the same binary
+- Dual MCP transport: stdio (local subprocess clients) and Streamable HTTP (remote clients), from the same binary — HTTP is fail-closed by default, requiring a bearer token (`MCP_HTTP_TOKEN`) unless explicitly opted out for lab use
 - Docker image (multi-arch, GHCR) + Docker Compose, with a self-check `-healthcheck` mode for shell-less containers
 - CI/CD: PR-gated build/vet/lint/race-tested-CI, automatic semantic versioning + changelog + image publish + Trivy scan on merge to `main` — see [CI/CD](#cicd)
 
@@ -312,8 +312,9 @@ proxmox:
 | `-transport` | `stdio` | `stdio` (local subprocess clients) or `http` (remote Streamable HTTP clients) |
 | `-http-addr` | `:8080` | Address to listen on when `-transport=http` |
 | `-healthcheck` | `false` | Instead of starting the server, GET `-healthcheck-url` and exit 0/1 — used as the container `HEALTHCHECK` |
+| `-allow-anonymous-http` | `false` | Allow `-transport=http` to serve without a bearer token — **lab/dev only**, every tool becomes reachable to anyone who can reach the port |
 
-Host key verification is **fail-closed by default**: an unrecognized target's connection is refused unless it's in `known_hosts` or you explicitly opt into insecure mode.
+Host key verification is **fail-closed by default**: an unrecognized target's connection is refused unless it's in `known_hosts` or you explicitly opt into insecure mode. `-transport=http` is fail-closed the same way: it refuses to start unless the `MCP_HTTP_TOKEN` environment variable is set (see below) or `-allow-anonymous-http` is passed explicitly.
 
 ---
 
@@ -339,20 +340,23 @@ Infrastructure MCP Server supports two transports from the same binary, so it wo
 
 ### Remote HTTP
 
-Start the server with the HTTP transport (or `docker compose up -d`, which does this by default — see [Installation](#installation)):
+`-transport=http` requires a bearer token — `/mcp` exposes every registered tool, including `run_command`, so the server refuses to start without one (fail-closed, like host key verification above). Generate one and set it as `MCP_HTTP_TOKEN`:
 
 ```bash
+export MCP_HTTP_TOKEN=$(openssl rand -hex 32)
 ./bin/infrastructure-mcp -inventory configs/inventory.yaml -transport http -http-addr :8080
 ```
 
-Then point any remote-MCP-capable client at `http://<host>:8080/mcp`. For clients that only support stdio, bridge with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) or an equivalent local proxy:
+(or `docker compose up -d`, which does this by default once `MCP_HTTP_TOKEN` is set in `.env` — see [Installation](#installation)). Every request to `/mcp` must then send `Authorization: Bearer $MCP_HTTP_TOKEN`; `/healthz` stays open for container/load-balancer health checks. `-allow-anonymous-http` disables this requirement — lab/dev only, never expose an anonymous instance to anything but `localhost`.
+
+Point any remote-MCP-capable client at `http://<host>:8080/mcp` with that header set. For clients that only support stdio, bridge with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) or an equivalent local proxy:
 
 ```json
 {
   "mcpServers": {
     "infrastructure": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "http://<host>:8080/mcp"]
+      "args": ["-y", "mcp-remote", "http://<host>:8080/mcp", "--header", "Authorization: Bearer ${MCP_HTTP_TOKEN}"]
     }
   }
 }
@@ -427,6 +431,7 @@ Tools never return a raw Go error. Every failure is shaped as:
 - Least privilege
 - Read-only by default
 - Dangerous actions require explicit confirmation (e.g. `docker_restart` requires `confirm: true` and is a no-op otherwise)
+- `-transport=http` is fail-closed: it refuses to start without a bearer token (`MCP_HTTP_TOKEN`) unless `-allow-anonymous-http` is explicitly passed
 
 Found a security issue? Please report it privately rather than opening a public issue — see [Contributing](#contributing).
 

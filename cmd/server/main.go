@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"flag"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -45,6 +47,7 @@ func run() error {
 	httpAddr := flag.String("http-addr", ":8080", `address to listen on when -transport=http (e.g. ":8080")`)
 	healthcheck := flag.Bool("healthcheck", false, "instead of starting the server, GET -healthcheck-url and exit 0/1 on success/failure; used as the container HEALTHCHECK (the distroless base image has no shell/curl to run one externally)")
 	healthcheckURL := flag.String("healthcheck-url", "http://127.0.0.1:8080/healthz", "URL checked when -healthcheck is set")
+	allowAnonymousHTTP := flag.Bool("allow-anonymous-http", false, "allow -transport=http to serve without a bearer token (lab/dev only — every tool, including run_command, becomes reachable to anyone who can reach the port)")
 	flag.Parse()
 
 	if *healthcheck {
@@ -107,9 +110,16 @@ func run() error {
 		logger.Info("starting server", "transport", "stdio")
 		return server.Run(context.Background(), &mcp.StdioTransport{})
 	case "http":
+		token, err := resolveHTTPToken(os.Getenv("MCP_HTTP_TOKEN"), *allowAnonymousHTTP, *httpAddr)
+		if err != nil {
+			return err
+		}
+		if token == "" {
+			logger.Warn("starting -transport=http with no bearer token (-allow-anonymous-http)", "addr", *httpAddr)
+		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		return runHTTP(ctx, server, logger, *httpAddr)
+		return runHTTP(ctx, server, logger, *httpAddr, token)
 	default:
 		return fmt.Errorf("unknown -transport %q (want %q or %q)", *transportKind, "stdio", "http")
 	}
@@ -132,14 +142,47 @@ func runHealthcheck(url string) error {
 	return nil
 }
 
+// resolveHTTPToken decides the bearer token required on /mcp requests.
+// It fails closed: -transport=http refuses to start without either a
+// token or an explicit -allow-anonymous-http opt-out, since every
+// registered tool (including run_command) is reachable over /mcp with
+// no other access control.
+func resolveHTTPToken(token string, allowAnonymous bool, addr string) (string, error) {
+	if token == "" && !allowAnonymous {
+		return "", fmt.Errorf("-transport=http requires MCP_HTTP_TOKEN to be set (every registered tool, including run_command, would otherwise be reachable to anyone who can reach %s) — set MCP_HTTP_TOKEN or pass -allow-anonymous-http to explicitly opt out for local/lab use", addr)
+	}
+	return token, nil
+}
+
+// requireBearerToken wraps next so requests must carry an
+// "Authorization: Bearer <token>" header matching token exactly
+// (compared in constant time to avoid a timing side channel).
+func requireBearerToken(token string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !ok || subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="infrastructure-mcp"`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // runHTTP serves the MCP server over Streamable HTTP
 // (https://modelcontextprotocol.io/specification/2025-06-18/basic/transports),
 // the remote transport most IDEs and hosted agents speak, until ctx is
 // canceled. The same *mcp.Server instance is reused across sessions,
 // which the SDK documents as safe: "It is OK for getServer to return the
-// same server multiple times."
-func runHTTP(ctx context.Context, server *mcp.Server, logger *slog.Logger, addr string) error {
-	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
+// same server multiple times." /mcp requires token (via
+// requireBearerToken) unless token is empty, i.e. -allow-anonymous-http
+// was explicitly set. /healthz is never gated — it reveals nothing
+// beyond process liveness and container/LB health checks need it.
+func runHTTP(ctx context.Context, server *mcp.Server, logger *slog.Logger, addr string, token string) error {
+	var handler http.Handler = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
+	if token != "" {
+		handler = requireBearerToken(token, handler)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
