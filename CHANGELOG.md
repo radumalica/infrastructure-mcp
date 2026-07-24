@@ -7,3 +7,55 @@ Entries below this line are added automatically on every merge to `main`
 — do not edit by hand.
 
 - - -
+
+## v0.2.0 - 2026-07-24
+#### Features
+- v0.4 Kubernetes + v0.5 Grafana tools (#7) - (42c546d) - Radu
+#### Miscellaneous
+- changelog.md format fix (#5) - (a8f6ec4) - Radu
+- changelog.md format change - (c315bc8) - tox
+
+- - -
+
+## v0.1.1 - 2026-07-24
+#### Bug Fixes
+- require a bearer token on -transport=http (#4) - (cf61e73) - Radu
+- require a bearer token on -transport=http (security) - (a76e553) - tox
+
+- - -
+
+## v0.1.0 - 2026-07-24
+#### Bug Fixes
+- format CHANGELOG.md for clarity (#3) - (e51b492) - Radu
+- format CHANGELOG.md for clarity on automatic entry generation - (ef16e7e) - tox
+- update dependencies for modelcontextprotocol/go-sdk and jsonschema-go - (bc2ddb2) - tox
+#### Features
+- implement GitHub workflows for release management, conventional commit checks, and security scanning (#2) - (3f753c4) - Radu
+- implement GitHub workflows for release management, conventional commit checks, and security scanning - (0b59ab9) - tox
+- add discussion and issue templates for better community engagement (#1) - (9fe07d6) - Radu
+- add discussion and issue templates for better community engagement - (65be5c6) - tox
+
+- - -
+
+## v0.0.0 - 2026-07-24
+#### Bug Fixes
+- support multiple Grafana/Proxmox instances in inventory schema - (7d5e309) - tox
+#### Documentation
+- rewrite README as a professional open-source README, add MIT LICENSE - (60d5e88) - tox
+#### Features
+- CI/CD pipelines, Docker packaging, and remote MCP transport - (cddbd3e) - tox
+- v0.3 Docker tools (docker_ps, docker_logs, docker_stats, docker_restart, docker_images) - (c3bb722) - tox
+- v0.2 Linux extended tools (failed_services, cpu_usage, reboot_required, running_processes, journal_errors, kernel_version) - (fa24eab) - tox
+- Telnet transport + transparent SSH/Telnet dispatch for legacy network devices - (1b90a76) - tox
+- unify inventory targets, add SSH legacy crypto support for old devices - (e69bd5c) - tox
+- add structured error contract, per-execution logging, host-key CLI flags - (1d9fee4) - tox
+- complete v0.1 tool surface (run_command, uptime, disk_usage, memory_usage) - (29fed8e) - tox
+- add internal/ssh pooled client with proxyjump and host-key verification - (eaf4cff) - tox
+- wire MCP server skeleton with list_servers tool - (01bb71e) - tox
+- add inventory package with YAML loading, env-secret expansion, validation - (38b8e40) - tox
+#### Miscellaneous
+- ignore .claude/ (agent session/worktree state) - (d261c99) - tox
+- add GitHub Actions CI, relax go.mod version to README's 1.24+ floor - (ba4a944) - tox
+- initial project scaffold (go.mod, docs) - (6cacbd9) - tox
+
+
