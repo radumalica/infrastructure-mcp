@@ -58,10 +58,15 @@ type ServiceEndpoint struct {
 }
 
 // Inventory is the root document loaded from the inventory YAML file.
+//
+// Every category is a map keyed by name so a user with several instances
+// of the same kind of target (two Proxmox clusters, a Grafana per
+// environment, a dozen switches, ...) lists them side by side under one
+// key instead of the schema only ever allowing one.
 type Inventory struct {
-	Servers  map[string]Server        `yaml:"servers"`
-	Routers  map[string]NetworkDevice `yaml:"routers"`
-	Switches map[string]NetworkDevice `yaml:"switches"`
-	Grafana  *ServiceEndpoint         `yaml:"grafana"`
-	Proxmox  *ServiceEndpoint         `yaml:"proxmox"`
+	Servers  map[string]Server          `yaml:"servers"`
+	Routers  map[string]NetworkDevice   `yaml:"routers"`
+	Switches map[string]NetworkDevice   `yaml:"switches"`
+	Grafana  map[string]ServiceEndpoint `yaml:"grafana"`
+	Proxmox  map[string]ServiceEndpoint `yaml:"proxmox"`
 }

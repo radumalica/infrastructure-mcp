@@ -278,13 +278,18 @@ switches:
     password: ${ANCIENT_SW_PASSWORD}
     legacy_crypto: true
 
+# Every category, including single-instance-feeling ones like Grafana and
+# Proxmox, is a map keyed by name — so a second Grafana or a second Proxmox
+# cluster is just another key, not a schema change.
 grafana:
-  url: https://grafana.lab.local
-  token: ${GRAFANA_TOKEN}
+  main:
+    url: https://grafana.lab.local
+    token: ${GRAFANA_TOKEN}
 
 proxmox:
-  url: https://pve.lab.local:8006
-  token: ${PROXMOX_TOKEN}
+  lab:
+    url: https://pve.lab.local:8006
+    token: ${PROXMOX_TOKEN}
 ```
 
 **Secrets are never written in plaintext.** Any `${VAR}` in the YAML is resolved from the process environment at load time, and load fails closed if the variable is unset — real credentials are never committed to the repo.

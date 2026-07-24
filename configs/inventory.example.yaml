@@ -53,10 +53,15 @@ switches:
     password: ${ANCIENT_SW_PASSWORD}
     legacy_crypto: true
 
+# Each entry is keyed by name, so multiple instances of the same service
+# (per-environment Grafanas, multiple Proxmox clusters, ...) live side by
+# side under one key instead of the schema only ever allowing one.
 grafana:
-  url: https://grafana.lab.local
-  token: ${GRAFANA_TOKEN}
+  main:
+    url: https://grafana.lab.local
+    token: ${GRAFANA_TOKEN}
 
 proxmox:
-  url: https://pve.lab.local:8006
-  token: ${PROXMOX_TOKEN}
+  lab:
+    url: https://pve.lab.local:8006
+    token: ${PROXMOX_TOKEN}

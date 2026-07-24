@@ -65,14 +65,14 @@ func (inv *Inventory) Validate() error {
 			return fmt.Errorf("inventory: switch %q: %w", name, err)
 		}
 	}
-	if inv.Grafana != nil {
-		if err := validate.Struct(inv.Grafana); err != nil {
-			return fmt.Errorf("inventory: grafana: %w", err)
+	for name, g := range inv.Grafana {
+		if err := validate.Struct(g); err != nil {
+			return fmt.Errorf("inventory: grafana %q: %w", name, err)
 		}
 	}
-	if inv.Proxmox != nil {
-		if err := validate.Struct(inv.Proxmox); err != nil {
-			return fmt.Errorf("inventory: proxmox: %w", err)
+	for name, p := range inv.Proxmox {
+		if err := validate.Struct(p); err != nil {
+			return fmt.Errorf("inventory: proxmox %q: %w", name, err)
 		}
 	}
 

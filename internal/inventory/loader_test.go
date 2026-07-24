@@ -29,12 +29,17 @@ switches:
     vendor: cisco
 
 grafana:
-  url: https://grafana.lab.local
-  token: ${TEST_GRAFANA_TOKEN}
+  main:
+    url: https://grafana.lab.local
+    token: ${TEST_GRAFANA_TOKEN}
+  staging:
+    url: https://grafana-staging.lab.local
+    token: static-token
 
 proxmox:
-  url: https://pve.lab.local:8006
-  token: static-token
+  lab:
+    url: https://pve.lab.local:8006
+    token: static-token
 `
 
 func TestParse_Valid(t *testing.T) {
@@ -51,8 +56,17 @@ func TestParse_Valid(t *testing.T) {
 	if inv.Servers["archive"].Hostname != "10.0.0.5" {
 		t.Errorf("unexpected hostname: %s", inv.Servers["archive"].Hostname)
 	}
-	if inv.Grafana.Token != "secret-token" {
-		t.Errorf("expected env var to be expanded, got %q", inv.Grafana.Token)
+	if len(inv.Grafana) != 2 {
+		t.Errorf("expected 2 grafana instances, got %d", len(inv.Grafana))
+	}
+	if inv.Grafana["main"].Token != "secret-token" {
+		t.Errorf("expected env var to be expanded, got %q", inv.Grafana["main"].Token)
+	}
+	if inv.Grafana["staging"].URL != "https://grafana-staging.lab.local" {
+		t.Errorf("unexpected staging grafana url: %s", inv.Grafana["staging"].URL)
+	}
+	if len(inv.Proxmox) != 1 || inv.Proxmox["lab"].URL != "https://pve.lab.local:8006" {
+		t.Errorf("unexpected proxmox entries: %+v", inv.Proxmox)
 	}
 	if inv.Routers["core"].Vendor != "cisco" {
 		t.Errorf("unexpected router vendor: %s", inv.Routers["core"].Vendor)
