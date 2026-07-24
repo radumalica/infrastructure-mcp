@@ -71,6 +71,12 @@ func run() error {
 	tools.RegisterUptime(server, logger, linuxClient)
 	tools.RegisterDiskUsage(server, logger, linuxClient)
 	tools.RegisterMemoryUsage(server, logger, linuxClient)
+	tools.RegisterFailedServices(server, logger, linuxClient)
+	tools.RegisterCPUUsage(server, logger, linuxClient)
+	tools.RegisterRebootRequired(server, logger, linuxClient)
+	tools.RegisterRunningProcesses(server, logger, linuxClient)
+	tools.RegisterJournalErrors(server, logger, linuxClient)
+	tools.RegisterKernelVersion(server, logger, linuxClient)
 
 	logger.Info("starting server", "transport", "stdio")
 	return server.Run(context.Background(), &mcp.StdioTransport{})

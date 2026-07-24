@@ -47,3 +47,45 @@ type MemoryUsage struct {
 	SwapTotalKB int64
 	SwapFreeKB  int64
 }
+
+// FailedService describes one systemd unit in the "failed" state, as
+// reported by `systemctl list-units --state=failed`.
+type FailedService struct {
+	Unit        string
+	Load        string
+	Active      string
+	Sub         string
+	Description string
+}
+
+// CPUUsage reports aggregate CPU utilization sampled over a short window.
+type CPUUsage struct {
+	UsedPercent float64
+}
+
+// RebootRequired reports whether a host is pending a reboot, and why.
+type RebootRequired struct {
+	Required      bool
+	Reason        string
+	RunningKernel string
+	NewestKernel  string
+}
+
+// ProcessInfo describes one running process, as reported by `ps`.
+type ProcessInfo struct {
+	PID        int
+	PPID       int
+	User       string
+	CPUPercent float64
+	MemPercent float64
+	Command    string
+}
+
+// JournalEntry describes one systemd journal entry at error priority or
+// higher.
+type JournalEntry struct {
+	Timestamp time.Time
+	Unit      string
+	Priority  string
+	Message   string
+}

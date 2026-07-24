@@ -13,10 +13,16 @@ import (
 )
 
 type fakeDiagnostics struct {
-	uptime linux.UptimeInfo
-	disks  []linux.DiskUsage
-	memory linux.MemoryUsage
-	err    error
+	uptime         linux.UptimeInfo
+	disks          []linux.DiskUsage
+	memory         linux.MemoryUsage
+	failedServices []linux.FailedService
+	cpu            linux.CPUUsage
+	reboot         linux.RebootRequired
+	processes      []linux.ProcessInfo
+	journalEntries []linux.JournalEntry
+	kernelVersion  string
+	err            error
 }
 
 type structuredToolError struct {
@@ -35,6 +41,24 @@ func (f *fakeDiagnostics) DiskUsage(context.Context, string) ([]linux.DiskUsage,
 func (f *fakeDiagnostics) MemoryUsage(context.Context, string) (linux.MemoryUsage, error) {
 	return f.memory, f.err
 }
+func (f *fakeDiagnostics) FailedServices(context.Context, string) ([]linux.FailedService, error) {
+	return f.failedServices, f.err
+}
+func (f *fakeDiagnostics) CPUUsage(context.Context, string) (linux.CPUUsage, error) {
+	return f.cpu, f.err
+}
+func (f *fakeDiagnostics) RebootRequired(context.Context, string) (linux.RebootRequired, error) {
+	return f.reboot, f.err
+}
+func (f *fakeDiagnostics) RunningProcesses(context.Context, string, int) ([]linux.ProcessInfo, error) {
+	return f.processes, f.err
+}
+func (f *fakeDiagnostics) JournalErrors(context.Context, string, int) ([]linux.JournalEntry, error) {
+	return f.journalEntries, f.err
+}
+func (f *fakeDiagnostics) KernelVersion(context.Context, string) (string, error) {
+	return f.kernelVersion, f.err
+}
 
 func newDiagnosticsSession(t *testing.T, diag *fakeDiagnostics) *mcp.ClientSession {
 	t.Helper()
@@ -44,6 +68,12 @@ func newDiagnosticsSession(t *testing.T, diag *fakeDiagnostics) *mcp.ClientSessi
 	RegisterUptime(server, testLogger(), diag)
 	RegisterDiskUsage(server, testLogger(), diag)
 	RegisterMemoryUsage(server, testLogger(), diag)
+	RegisterFailedServices(server, testLogger(), diag)
+	RegisterCPUUsage(server, testLogger(), diag)
+	RegisterRebootRequired(server, testLogger(), diag)
+	RegisterRunningProcesses(server, testLogger(), diag)
+	RegisterJournalErrors(server, testLogger(), diag)
+	RegisterKernelVersion(server, testLogger(), diag)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	go func() { _, _ = server.Connect(ctx, serverTransport, nil) }()
@@ -177,7 +207,11 @@ func TestDiagnosticsTools_ErrorPath(t *testing.T) {
 	session := newDiagnosticsSession(t, diag)
 	ctx := context.Background()
 
-	tools := []string{"uptime", "disk_usage", "memory_usage"}
+	tools := []string{
+		"uptime", "disk_usage", "memory_usage",
+		"failed_services", "cpu_usage", "reboot_required",
+		"running_processes", "journal_errors", "kernel_version",
+	}
 	for _, name := range tools {
 		t.Run(name, func(t *testing.T) {
 			result, err := session.CallTool(ctx, &mcp.CallToolParams{
@@ -209,5 +243,181 @@ func TestDiagnosticsTools_ErrorPath(t *testing.T) {
 				t.Error("expected non-empty message")
 			}
 		})
+	}
+}
+
+func TestFailedServices_ViaMCPProtocol(t *testing.T) {
+	diag := &fakeDiagnostics{failedServices: []linux.FailedService{
+		{Unit: "nginx.service", Load: "loaded", Active: "failed", Sub: "failed", Description: "A web server"},
+	}}
+	session := newDiagnosticsSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "failed_services",
+		Arguments: map[string]any{"server": "archive"},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+	}
+
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out FailedServicesOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(out.Services) != 1 || out.Status != "warning" {
+		t.Errorf("unexpected output: %+v", out)
+	}
+}
+
+func TestFailedServices_NoneIsOK(t *testing.T) {
+	diag := &fakeDiagnostics{}
+	session := newDiagnosticsSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "failed_services",
+		Arguments: map[string]any{"server": "archive"},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+	}
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out FailedServicesOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.Status != "ok" {
+		t.Errorf("Status = %q, want ok", out.Status)
+	}
+}
+
+func TestCPUUsage_SeverityLevels(t *testing.T) {
+	tests := []struct {
+		name       string
+		pct        float64
+		wantStatus string
+	}{
+		{"low usage is ok", 40, "ok"},
+		{"80 percent warns", 80, "warning"},
+		{"95 percent is critical", 95, "critical"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			diag := &fakeDiagnostics{cpu: linux.CPUUsage{UsedPercent: tt.pct}}
+			session := newDiagnosticsSession(t, diag)
+			ctx := context.Background()
+
+			result, err := session.CallTool(ctx, &mcp.CallToolParams{
+				Name:      "cpu_usage",
+				Arguments: map[string]any{"server": "archive"},
+			})
+			if err != nil || result.IsError {
+				t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+			}
+			raw, _ := json.Marshal(result.StructuredContent)
+			var out CPUUsageOutput
+			if err := json.Unmarshal(raw, &out); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if out.Status != tt.wantStatus {
+				t.Errorf("status = %q, want %q", out.Status, tt.wantStatus)
+			}
+		})
+	}
+}
+
+func TestRebootRequired_ViaMCPProtocol(t *testing.T) {
+	diag := &fakeDiagnostics{reboot: linux.RebootRequired{
+		Required: true, Reason: "kernel mismatch", RunningKernel: "6.8.0-1", NewestKernel: "6.8.0-2",
+	}}
+	session := newDiagnosticsSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "reboot_required",
+		Arguments: map[string]any{"server": "archive"},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+	}
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out RebootRequiredOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !out.Required || out.Status != "warning" {
+		t.Errorf("unexpected output: %+v", out)
+	}
+}
+
+func TestRunningProcesses_ViaMCPProtocol(t *testing.T) {
+	diag := &fakeDiagnostics{processes: []linux.ProcessInfo{
+		{PID: 1, PPID: 0, User: "root", CPUPercent: 1.5, MemPercent: 0.5, Command: "init"},
+	}}
+	session := newDiagnosticsSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "running_processes",
+		Arguments: map[string]any{"server": "archive", "limit": 5},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+	}
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out RunningProcessesOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(out.Processes) != 1 || out.Processes[0].Command != "init" {
+		t.Errorf("unexpected output: %+v", out)
+	}
+}
+
+func TestJournalErrors_ViaMCPProtocol(t *testing.T) {
+	diag := &fakeDiagnostics{journalEntries: []linux.JournalEntry{
+		{Timestamp: time.Unix(1700000000, 0).UTC(), Unit: "nginx.service", Priority: "3", Message: "boom"},
+	}}
+	session := newDiagnosticsSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "journal_errors",
+		Arguments: map[string]any{"server": "archive"},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+	}
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out JournalErrorsOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(out.Entries) != 1 || out.Entries[0].Message != "boom" || out.Status != "warning" {
+		t.Errorf("unexpected output: %+v", out)
+	}
+}
+
+func TestKernelVersion_ViaMCPProtocol(t *testing.T) {
+	diag := &fakeDiagnostics{kernelVersion: "6.8.0-1-generic"}
+	session := newDiagnosticsSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "kernel_version",
+		Arguments: map[string]any{"server": "archive"},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+	}
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out KernelVersionOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.KernelRelease != "6.8.0-1-generic" {
+		t.Errorf("KernelRelease = %q, want %q", out.KernelRelease, "6.8.0-1-generic")
 	}
 }

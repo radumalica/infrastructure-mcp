@@ -159,3 +159,205 @@ func TestParseMemInfo_MissingMemTotal(t *testing.T) {
 		t.Fatal("expected error for missing MemTotal")
 	}
 }
+
+func TestParseFailedServices(t *testing.T) {
+	input := "nginx.service    loaded failed failed A high performance web server\n" +
+		"myapp.service    loaded failed failed\n" +
+		"\n"
+	got := parseFailedServices(input)
+	want := []FailedService{
+		{Unit: "nginx.service", Load: "loaded", Active: "failed", Sub: "failed", Description: "A high performance web server"},
+		{Unit: "myapp.service", Load: "loaded", Active: "failed", Sub: "failed", Description: ""},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("parseFailedServices() = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("entry %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestParseFailedServices_Empty(t *testing.T) {
+	got := parseFailedServices("")
+	if len(got) != 0 {
+		t.Errorf("expected no entries, got %+v", got)
+	}
+}
+
+func TestParseCPUUsage(t *testing.T) {
+	// user nice system idle iowait irq softirq steal guest guest_nice
+	sample0 := "cpu  1000 0 500 8000 100 0 0 0 0 0\n" +
+		"cpu0 500 0 250 4000 50 0 0 0 0 0\n"
+	sample1 := "cpu  1200 0 600 8200 100 0 0 0 0 0\n" +
+		"cpu0 600 0 300 4100 50 0 0 0 0 0\n"
+	got, err := parseCPUUsage(sample0 + sample1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// totalDelta = (1200-1000)+(600-500)+(8200-8000)+(100-100) = 200+100+200+0 = 500
+	// idleDelta (idle+iowait) = (8200-8000)+(100-100) = 200
+	// used = (500-200)/500*100 = 60
+	want := 60.0
+	if got.UsedPercent != want {
+		t.Errorf("UsedPercent = %v, want %v", got.UsedPercent, want)
+	}
+}
+
+// TestParseCPUUsage_GuestNotDoubleCounted guards against summing
+// guest/guest_nice (indices 8-9) on top of user/nice, which the kernel
+// already folds them into — a real risk here, since this project targets
+// Proxmox/KVM hosts where guest time is a large fraction of total CPU.
+func TestParseCPUUsage_GuestNotDoubleCounted(t *testing.T) {
+	// user nice system idle iowait irq softirq steal guest guest_nice
+	sample0 := "cpu  1000 0 500 8000 100 0 0 0 300 0\n"
+	sample1 := "cpu  1200 0 600 8200 100 0 0 0 400 0\n"
+	got, err := parseCPUUsage(sample0 + sample1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Guest time is already included in the user delta (200), so the
+	// totalDelta/idleDelta/result must be identical to the guest=0 case:
+	// totalDelta = 500, idleDelta = 200, used = 60%.
+	want := 60.0
+	if got.UsedPercent != want {
+		t.Errorf("UsedPercent = %v, want %v (guest/guest_nice must not be double-counted)", got.UsedPercent, want)
+	}
+}
+
+func TestParseCPUUsage_MissingSecondSample(t *testing.T) {
+	_, err := parseCPUUsage("cpu  1000 0 500 8000 100 0 0 0 0 0\n")
+	if err == nil {
+		t.Fatal("expected error for a single sample")
+	}
+}
+
+func TestParseCPUUsage_MalformedField(t *testing.T) {
+	input := "cpu  not-a-number 0 500 8000 100 0 0 0 0 0\n" +
+		"cpu  1200 0 600 8200 100 0 0 0 0 0\n"
+	_, err := parseCPUUsage(input)
+	if err == nil {
+		t.Fatal("expected error for a malformed field")
+	}
+}
+
+func TestParseRebootRequired(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    RebootRequired
+		wantErr bool
+	}{
+		{
+			name:  "marker file present",
+			input: "REBOOT_REQUIRED=1\n6.8.0-1\n6.8.0-1\n",
+			want: RebootRequired{
+				Required: true, Reason: "/var/run/reboot-required marker file is present",
+				RunningKernel: "6.8.0-1", NewestKernel: "6.8.0-1",
+			},
+		},
+		{
+			name:  "kernel mismatch",
+			input: "REBOOT_REQUIRED=0\n6.8.0-1\n6.8.0-2\n",
+			want: RebootRequired{
+				Required: true, Reason: "running kernel 6.8.0-1 differs from newest installed kernel 6.8.0-2",
+				RunningKernel: "6.8.0-1", NewestKernel: "6.8.0-2",
+			},
+		},
+		{
+			name:  "up to date",
+			input: "REBOOT_REQUIRED=0\n6.8.0-1\n6.8.0-1\n",
+			want: RebootRequired{
+				Required: false, RunningKernel: "6.8.0-1", NewestKernel: "6.8.0-1",
+			},
+		},
+		{
+			name:  "no newest kernel detected",
+			input: "REBOOT_REQUIRED=0\n6.8.0-1\n\n",
+			want: RebootRequired{
+				Required: false, RunningKernel: "6.8.0-1", NewestKernel: "",
+			},
+		},
+		{
+			name:    "too few lines",
+			input:   "REBOOT_REQUIRED=0\n",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseRebootRequired(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("parseRebootRequired() = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseProcesses(t *testing.T) {
+	input := "1234   1 root    12.3  4.5 nginx\n" +
+		"5678 1234 www-data 1.0  0.5 nginx: worker process\n"
+	got, err := parseProcesses(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []ProcessInfo{
+		{PID: 1234, PPID: 1, User: "root", CPUPercent: 12.3, MemPercent: 4.5, Command: "nginx"},
+		{PID: 5678, PPID: 1234, User: "www-data", CPUPercent: 1.0, MemPercent: 0.5, Command: "nginx: worker process"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("parseProcesses() = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("entry %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestParseProcesses_MalformedLine(t *testing.T) {
+	_, err := parseProcesses("only three fields\n")
+	if err == nil {
+		t.Fatal("expected error for malformed line")
+	}
+}
+
+func TestParseJournalErrors(t *testing.T) {
+	input := `{"__REALTIME_TIMESTAMP":"1700000000000000","PRIORITY":"3","_SYSTEMD_UNIT":"nginx.service","MESSAGE":"worker exited on signal 11"}
+{"__REALTIME_TIMESTAMP":"1700000001000000","PRIORITY":"3","SYSLOG_IDENTIFIER":"kernel","MESSAGE":[111,111,112,115]}
+`
+	got, err := parseJournalErrors(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(got))
+	}
+	if got[0].Unit != "nginx.service" || got[0].Message != "worker exited on signal 11" || got[0].Priority != "3" {
+		t.Errorf("entry 0 = %+v", got[0])
+	}
+	if !got[0].Timestamp.Equal(time.UnixMicro(1700000000000000).UTC()) {
+		t.Errorf("entry 0 timestamp = %v", got[0].Timestamp)
+	}
+	if got[1].Unit != "kernel" || got[1].Message != "oops" {
+		t.Errorf("entry 1 = %+v", got[1])
+	}
+}
+
+func TestParseJournalErrors_MalformedJSON(t *testing.T) {
+	_, err := parseJournalErrors("not json\n")
+	if err == nil {
+		t.Fatal("expected error for malformed JSON line")
+	}
+}

@@ -2,6 +2,7 @@ package linux
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -169,4 +170,245 @@ func parseMemInfo(output string) (MemoryUsage, error) {
 		SwapTotalKB: values["SwapTotal"],
 		SwapFreeKB:  values["SwapFree"],
 	}, nil
+}
+
+// parseFailedServices parses the output of
+// `systemctl list-units --type=service --state=failed --no-legend --plain`.
+// Each line is: UNIT LOAD ACTIVE SUB DESCRIPTION (description may contain
+// spaces, so it is rejoined from the remaining fields).
+func parseFailedServices(output string) []FailedService {
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	var result []FailedService
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		description := ""
+		if len(fields) > 4 {
+			description = strings.Join(fields[4:], " ")
+		}
+		result = append(result, FailedService{
+			Unit:        fields[0],
+			Load:        fields[1],
+			Active:      fields[2],
+			Sub:         fields[3],
+			Description: description,
+		})
+	}
+	return result
+}
+
+// parseCPUUsage parses the combined output of two `/proc/stat` reads taken
+// one second apart and returns utilization over that window, computed from
+// the aggregate "cpu " line (kernel/Documentation/filesystems/proc.rst):
+// fields after the label are user, nice, system, idle, iowait, irq,
+// softirq, steal, guest, guest_nice (jiffies since boot).
+func parseCPUUsage(output string) (CPUUsage, error) {
+	var samples [][]int64
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "cpu ") {
+			continue
+		}
+		fields := strings.Fields(line)[1:]
+		vals := make([]int64, 0, len(fields))
+		for _, f := range fields {
+			v, err := strconv.ParseInt(f, 10, 64)
+			if err != nil {
+				return CPUUsage{}, fmt.Errorf("linux: parse cpu usage: field %q: %w", f, err)
+			}
+			vals = append(vals, v)
+		}
+		samples = append(samples, vals)
+		if len(samples) == 2 {
+			break
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return CPUUsage{}, fmt.Errorf("linux: parse cpu usage: %w", err)
+	}
+	if len(samples) != 2 {
+		return CPUUsage{}, fmt.Errorf("linux: parse cpu usage: expected 2 samples of the aggregate cpu line, got %d", len(samples))
+	}
+
+	// Sum only user..steal (indices 0-7): the kernel already folds guest
+	// into user and guest_nice into nice, so including guest/guest_nice
+	// (indices 8-9) as well would double-count that time.
+	sum := func(vals []int64) (total, idle int64) {
+		for i, v := range vals {
+			if i > 7 {
+				break
+			}
+			total += v
+			if i == 3 || i == 4 { // idle, iowait
+				idle += v
+			}
+		}
+		return
+	}
+	total0, idle0 := sum(samples[0])
+	total1, idle1 := sum(samples[1])
+
+	totalDelta := total1 - total0
+	idleDelta := idle1 - idle0
+	if totalDelta <= 0 {
+		return CPUUsage{UsedPercent: 0}, nil
+	}
+	usedPercent := float64(totalDelta-idleDelta) / float64(totalDelta) * 100
+	if usedPercent < 0 {
+		usedPercent = 0
+	}
+	return CPUUsage{UsedPercent: usedPercent}, nil
+}
+
+// parseRebootRequired parses the three-line output produced by
+// RebootRequired's shell command: the reboot-required marker flag, the
+// running kernel release, and the newest kernel installed under /boot
+// (empty if none could be determined).
+func parseRebootRequired(output string) (RebootRequired, error) {
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+	if len(lines) < 2 {
+		return RebootRequired{}, fmt.Errorf("linux: parse reboot required: expected at least 2 lines, got %d", len(lines))
+	}
+
+	markerSet := strings.TrimSpace(lines[0]) == "REBOOT_REQUIRED=1"
+	runningKernel := strings.TrimSpace(lines[1])
+	newestKernel := ""
+	if len(lines) > 2 {
+		newestKernel = strings.TrimSpace(lines[2])
+	}
+
+	required := markerSet
+	reason := ""
+	switch {
+	case markerSet:
+		reason = "/var/run/reboot-required marker file is present"
+	case newestKernel != "" && newestKernel != runningKernel:
+		required = true
+		reason = fmt.Sprintf("running kernel %s differs from newest installed kernel %s", runningKernel, newestKernel)
+	}
+
+	return RebootRequired{
+		Required:      required,
+		Reason:        reason,
+		RunningKernel: runningKernel,
+		NewestKernel:  newestKernel,
+	}, nil
+}
+
+// parseProcesses parses the output of
+// `ps -eo pid,ppid,user:20,pcpu,pmem,comm --no-headers --sort=-pcpu`.
+func parseProcesses(output string) ([]ProcessInfo, error) {
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	var result []ProcessInfo
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 6 {
+			return nil, fmt.Errorf("linux: parse processes: malformed line: %q", line)
+		}
+
+		pid, err := strconv.Atoi(fields[0])
+		if err != nil {
+			return nil, fmt.Errorf("linux: parse processes pid: %w", err)
+		}
+		ppid, err := strconv.Atoi(fields[1])
+		if err != nil {
+			return nil, fmt.Errorf("linux: parse processes ppid: %w", err)
+		}
+		pcpu, err := strconv.ParseFloat(fields[3], 64)
+		if err != nil {
+			return nil, fmt.Errorf("linux: parse processes pcpu: %w", err)
+		}
+		pmem, err := strconv.ParseFloat(fields[4], 64)
+		if err != nil {
+			return nil, fmt.Errorf("linux: parse processes pmem: %w", err)
+		}
+
+		result = append(result, ProcessInfo{
+			PID:        pid,
+			PPID:       ppid,
+			User:       fields[2],
+			CPUPercent: pcpu,
+			MemPercent: pmem,
+			Command:    strings.Join(fields[5:], " "),
+		})
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("linux: parse processes: %w", err)
+	}
+	return result, nil
+}
+
+// journalLine mirrors the subset of `journalctl -o json` fields
+// JournalErrors needs. MESSAGE is captured raw because journald emits it
+// as a JSON string for text log lines but as an array of byte values for
+// non-UTF-8 binary payloads.
+type journalLine struct {
+	RealtimeTimestamp string          `json:"__REALTIME_TIMESTAMP"`
+	Priority          string          `json:"PRIORITY"`
+	SystemdUnit       string          `json:"_SYSTEMD_UNIT"`
+	SyslogIdentifier  string          `json:"SYSLOG_IDENTIFIER"`
+	Message           json.RawMessage `json:"MESSAGE"`
+}
+
+// parseJournalErrors parses the newline-delimited JSON produced by
+// `journalctl -o json` (one JSON object per entry, not a JSON array).
+func parseJournalErrors(output string) ([]JournalEntry, error) {
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	var result []JournalEntry
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var jl journalLine
+		if err := json.Unmarshal([]byte(line), &jl); err != nil {
+			return nil, fmt.Errorf("linux: parse journal errors: %w", err)
+		}
+
+		unit := jl.SystemdUnit
+		if unit == "" {
+			unit = jl.SyslogIdentifier
+		}
+
+		var timestamp time.Time
+		if usec, err := strconv.ParseInt(jl.RealtimeTimestamp, 10, 64); err == nil {
+			timestamp = time.UnixMicro(usec).UTC()
+		}
+
+		result = append(result, JournalEntry{
+			Timestamp: timestamp,
+			Unit:      unit,
+			Priority:  jl.Priority,
+			Message:   decodeJournalMessage(jl.Message),
+		})
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("linux: parse journal errors: %w", err)
+	}
+	return result, nil
+}
+
+// decodeJournalMessage handles both journald MESSAGE encodings: a plain
+// JSON string, or (for non-UTF-8 payloads) a JSON array of byte values.
+func decodeJournalMessage(raw json.RawMessage) string {
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	var bytes []byte
+	if err := json.Unmarshal(raw, &bytes); err == nil {
+		return string(bytes)
+	}
+	return ""
 }

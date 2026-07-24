@@ -33,6 +33,12 @@ type LinuxDiagnostics interface {
 	Uptime(ctx context.Context, server string) (linux.UptimeInfo, error)
 	DiskUsage(ctx context.Context, server string) ([]linux.DiskUsage, error)
 	MemoryUsage(ctx context.Context, server string) (linux.MemoryUsage, error)
+	FailedServices(ctx context.Context, server string) ([]linux.FailedService, error)
+	CPUUsage(ctx context.Context, server string) (linux.CPUUsage, error)
+	RebootRequired(ctx context.Context, server string) (linux.RebootRequired, error)
+	RunningProcesses(ctx context.Context, server string, limit int) ([]linux.ProcessInfo, error)
+	JournalErrors(ctx context.Context, server string, limit int) ([]linux.JournalEntry, error)
+	KernelVersion(ctx context.Context, server string) (string, error)
 }
 
 // RegisterUptime adds the uptime tool to server.
