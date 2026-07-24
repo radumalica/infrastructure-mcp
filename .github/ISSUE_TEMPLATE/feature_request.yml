@@ -1,0 +1,89 @@
+name: Feature Request
+description: Suggest a new tool, adapter, or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement. Before opening, check the
+        [roadmap](https://github.com/radumalica/infrastructure-mcp#roadmap)
+        — the feature may already be planned.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: What part of the project does this relate to?
+      options:
+        - Core (inventory, SSH, connection handling)
+        - Linux tools
+        - Docker tools
+        - Kubernetes tools (v0.4)
+        - Grafana tools (v0.5)
+        - Proxmox tools (v0.6)
+        - Networking — Cisco / MikroTik / UniFi (v0.7)
+        - Monitoring — Prometheus / Loki / Alertmanager (v0.8)
+        - Home Assistant (v0.9)
+        - Composite / expert tools (v1.0)
+        - CI/CD, Docker image, or release process
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: |
+        Describe the use case or pain point. What are you trying to do
+        today that requires this feature?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: |
+        How do you think this should work? Include tool names, parameter
+        ideas, or example outputs if you have them.
+
+        ```json
+        {
+          "tool": "example_tool",
+          "target": "server-name",
+          "result": "..."
+        }
+        ```
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: |
+        Have you tried working around this another way? Running raw SSH
+        commands, using a different tool, etc.?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: willingness
+    attributes:
+      label: Would you be willing to contribute this?
+      options:
+        - Yes, I'd like to implement this with guidance
+        - Yes, but I'd need help with part of it
+        - No, I'm just suggesting it
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Links, screenshots, related issues, or vendor API docs.
+    validations:
+      required: false

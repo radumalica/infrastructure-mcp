@@ -1,0 +1,55 @@
+title: "[Q&A] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask a question about setup, configuration, usage, or internals.
+        Check the [README](https://github.com/radumalica/infrastructure-mcp#readme)
+        and [existing discussions](https://github.com/radumalica/infrastructure-mcp/discussions)
+        first — your question may already be answered.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What are you trying to figure out?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: What have you tried so far?
+      description: |
+        Include any configuration snippets, error output, or steps you've
+        already taken. Redact real credentials.
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Infrastructure MCP Server version
+      placeholder: "v0.3.1 / ghcr.io/...:latest / abc1234"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Installation / Docker
+        - Inventory / configuration
+        - Linux tools
+        - Docker tools
+        - Kubernetes tools
+        - Grafana / Proxmox / monitoring tools
+        - Networking (Cisco / MikroTik / UniFi)
+        - MCP transport (stdio / HTTP)
+        - Connecting an AI agent
+        - Development / contributing
+        - Other
+    validations:
+      required: true

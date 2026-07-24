@@ -33,4 +33,4 @@ ci = { changelog_title = "CI/CD" }
 path = "CHANGELOG.md"
 remote = "github.com"
 repository = "infrastructure-mcp"
-owner = "your-org"
+owner = "radumalica"

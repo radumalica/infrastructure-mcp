@@ -1,0 +1,114 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. The more detail you provide,
+        the faster we can reproduce and fix it.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: |
+        Minimal steps to trigger the bug. Include the exact tool call or
+        configuration snippet if relevant.
+      placeholder: |
+        1. Configure inventory with ...
+        2. Connect agent and call `tool_name()`
+        3. See error ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or output
+      description: |
+        Paste any error messages, structured tool output, or server logs.
+        Redact real credentials, but keep everything else — IPs, hostnames,
+        and error text are all useful.
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: Infrastructure MCP Server version
+      description: "Output of `infrastructure-mcp --version`, the image tag, or the commit SHA."
+      placeholder: "v0.3.1 / ghcr.io/...:latest / abc1234"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: transport
+    attributes:
+      label: MCP transport
+      options:
+        - stdio
+        - Streamable HTTP
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: agent
+    attributes:
+      label: AI agent / client
+      description: Which MCP client are you connecting with?
+      multiple: true
+      options:
+        - Claude Desktop
+        - Claude Code
+        - Cursor
+        - Hermes
+        - OpenAI Agents
+        - mcp-remote bridge
+        - Other (describe in the description field)
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Server OS and architecture
+      placeholder: "Ubuntu 24.04 amd64, Debian 12 arm64, ..."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How badly does this affect you?
+      options:
+        - Low — cosmetic or minor inconvenience
+        - Medium — feature is broken but a workaround exists
+        - High — feature is broken, no workaround
+        - Critical — crash, data loss, or security issue
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Anything else that might help — screenshots, related issues, your inventory redacted, etc.
+    validations:
+      required: false

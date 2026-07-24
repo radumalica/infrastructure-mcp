@@ -1,0 +1,45 @@
+title: "[Idea] "
+labels: ["idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea for a new tool, adapter, or improvement? Share it here
+        for early feedback before opening a formal feature request.
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: Describe what you'd like to see, and why it would be useful.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: What real-world scenario would this serve?
+    validations:
+      required: false
+
+  - type: textarea
+    id: prior-art
+    attributes:
+      label: Prior art
+      description: |
+        Does something similar exist in another tool, project, or vendor
+        API? Links welcome.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: willingness
+    attributes:
+      label: Would you be willing to contribute this?
+      options:
+        - Yes
+        - Maybe, with guidance
+        - No, just an idea
+    validations:
+      required: true
