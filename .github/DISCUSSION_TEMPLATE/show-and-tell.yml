@@ -1,0 +1,51 @@
+title: "[Show & Tell] "
+labels: ["show-and-tell"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share something you've built, configured, or done with
+        Infrastructure MCP Server — a new inventory layout, a custom
+        workflow, an integration you're happy with, or a deployment setup
+        that's working well.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What did you build or configure?
+      description: Describe what you set up and what problem it solves for you.
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: How does it work?
+      description: |
+        Share any interesting patterns, configuration snippets, or
+        architectural decisions. Redact real credentials and hostnames.
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshots or output
+      description: Drag and drop images, paste agent output, or share relevant logs.
+    validations:
+      required: false
+
+  - type: textarea
+    id: stack
+    attributes:
+      label: What's in your stack?
+      description: |
+        Agents, infrastructure, and tools you're using alongside
+        Infrastructure MCP Server.
+      placeholder: |
+        - Claude Code + stdio transport
+        - 3 Linux servers (Ubuntu 24.04)
+        - 2 Docker hosts
+        - Grafana + Prometheus
+    validations:
+      required: false
