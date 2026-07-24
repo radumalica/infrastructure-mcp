@@ -1,0 +1,49 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - unused
+    - errcheck
+    - staticcheck
+    - govet
+    - ineffassign
+    - unconvert
+    - misspell
+    - bodyclose
+    - gosec
+  exclusions:
+    rules:
+      # Test files intentionally use weak/insecure patterns (fake SSH
+      # servers, deliberately-invalid inputs) to exercise the real code
+      # paths under test, and routinely `defer x.Close()` on throwaway
+      # test fixtures where the close error carries no signal.
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+      # Reading a file whose path comes from a CLI flag (-inventory) or
+      # from the already-validated inventory config (SSH private key
+      # path) is the intended, documented behavior here, not a path
+      # traversal bug — these paths are operator-controlled config, not
+      # untrusted request input.
+      - path: internal/inventory/loader\.go
+        linters:
+          - gosec
+        text: "G304"
+      - path: internal/ssh/auth\.go
+        linters:
+          - gosec
+        text: "G304"
+      # Dialing $SSH_AUTH_SOCK (the standard ssh-agent socket path) is
+      # the documented ssh-agent auth fallback, not attacker-influenced
+      # network input.
+      - path: internal/ssh/auth\.go
+        linters:
+          - gosec
+        text: "G704"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

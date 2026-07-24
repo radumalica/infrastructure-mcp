@@ -35,17 +35,7 @@ func parsePs(output string) ([]Container, error) {
 		if err := json.Unmarshal([]byte(line), &pl); err != nil {
 			return nil, fmt.Errorf("docker: parse ps: %w", err)
 		}
-		result = append(result, Container{
-			ID:         pl.ID,
-			Image:      pl.Image,
-			Command:    pl.Command,
-			CreatedAt:  pl.CreatedAt,
-			Status:     pl.Status,
-			State:      pl.State,
-			Ports:      pl.Ports,
-			Names:      pl.Names,
-			RunningFor: pl.RunningFor,
-		})
+		result = append(result, Container(pl))
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("docker: parse ps: %w", err)
@@ -77,13 +67,7 @@ func parseImages(output string) ([]Image, error) {
 		if err := json.Unmarshal([]byte(line), &il); err != nil {
 			return nil, fmt.Errorf("docker: parse images: %w", err)
 		}
-		result = append(result, Image{
-			ID:         il.ID,
-			Repository: il.Repository,
-			Tag:        il.Tag,
-			CreatedAt:  il.CreatedAt,
-			Size:       il.Size,
-		})
+		result = append(result, Image(il))
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("docker: parse images: %w", err)

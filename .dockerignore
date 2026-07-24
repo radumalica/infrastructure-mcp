@@ -1,0 +1,9 @@
+.git
+.github
+.claude
+bin/
+*.md
+!README.md
+configs/inventory.yaml
+inventory.yaml
+.env

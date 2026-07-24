@@ -1,12 +1,23 @@
 name: CI
 
+# Required gate for merging into main: this workflow runs on every pull
+# request, plus on push to main itself. Configure branch protection on
+# main to require the "test" and "lint" jobs below as required status
+# checks, and to require a PR (no direct pushes) before contributors can
+# merge.
+
 on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
-  build-test:
+  test:
+    name: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,5 +42,25 @@ jobs:
             exit 1
           fi
 
-      - name: Test
+      - name: Test (race detector, coverage)
         run: go test ./... -race -cover
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: golangci-lint
+        # v7+ is required for golangci-lint v2 config support (.golangci.yml
+        # is `version: "2"`); v6 only understands the v1 schema and would
+        # silently mis-lint or fail on this repo's config. Version pinned
+        # (not "latest") so the required PR gate is reproducible.
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2

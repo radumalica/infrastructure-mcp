@@ -8,6 +8,8 @@ coverage.*
 
 # Local config with secrets
 configs/inventory.local.yaml
+configs/inventory.yaml
+inventory.yaml
 .env
 
 # IDE

@@ -1,0 +1,35 @@
+services:
+  infrastructure-mcp:
+    build: .
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-your-org}/infrastructure-mcp:latest
+    container_name: infrastructure-mcp
+    restart: unless-stopped
+    command:
+      - "-inventory=/app/configs/inventory.yaml"
+      - "-transport=http"
+      - "-http-addr=:8080"
+      # - "-known-hosts=/home/nonroot/.ssh/known_hosts"
+    ports:
+      - "8080:8080"
+    volumes:
+      # Your real inventory — copy configs/inventory.example.yaml to
+      # ./inventory.yaml and fill it in first; never bake real inventory
+      # into the image.
+      - ./inventory.yaml:/app/configs/inventory.yaml:ro
+      # SSH keys/known_hosts referenced by the inventory (read-only).
+      - ${SSH_DIR:-~/.ssh}:/home/nonroot/.ssh:ro
+    environment:
+      # Populate from a local .env file (gitignored) — never commit real
+      # secrets. Any ${VAR} referenced in inventory.yaml is resolved from
+      # this environment at container start.
+      - GRAFANA_TOKEN=${GRAFANA_TOKEN:-}
+      - PROXMOX_TOKEN=${PROXMOX_TOKEN:-}
+    healthcheck:
+      # distroless has no shell/curl/wget, so the binary checks itself:
+      # -healthcheck does a single GET against -healthcheck-url and exits
+      # 0/1, standing in for a shell-based HEALTHCHECK command.
+      test: ["CMD", "/app/infrastructure-mcp", "-healthcheck", "-healthcheck-url=http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

@@ -76,7 +76,7 @@ func (p *Pool) Run(ctx context.Context, serverName, command string) (Result, err
 	if err != nil {
 		return Result{}, fmt.Errorf("ssh: new session on %q: %w", serverName, err)
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	var stdout, stderr bytes.Buffer
 	session.Stdout = &stdout

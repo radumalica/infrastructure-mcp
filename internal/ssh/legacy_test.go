@@ -13,10 +13,10 @@ func TestApplyLegacyCrypto_WidensAlgorithmSets(t *testing.T) {
 	insecure := ssh.InsecureAlgorithms()
 	supported := ssh.SupportedAlgorithms()
 
-	if len(cfg.Config.KeyExchanges) <= len(supported.KeyExchanges) {
+	if len(cfg.KeyExchanges) <= len(supported.KeyExchanges) {
 		t.Error("expected KeyExchanges to include insecure algorithms beyond the supported set")
 	}
-	if len(cfg.Config.Ciphers) <= len(supported.Ciphers) {
+	if len(cfg.Ciphers) <= len(supported.Ciphers) {
 		t.Error("expected Ciphers to include insecure algorithms beyond the supported set")
 	}
 	if len(cfg.HostKeyAlgorithms) <= len(supported.HostKeys) {
@@ -25,7 +25,7 @@ func TestApplyLegacyCrypto_WidensAlgorithmSets(t *testing.T) {
 
 	if len(insecure.KeyExchanges) > 0 {
 		found := false
-		for _, alg := range cfg.Config.KeyExchanges {
+		for _, alg := range cfg.KeyExchanges {
 			if alg == insecure.KeyExchanges[0] {
 				found = true
 				break

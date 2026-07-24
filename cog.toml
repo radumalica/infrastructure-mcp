@@ -1,0 +1,36 @@
+# Cocogitto configuration: https://docs.cocogitto.io
+#
+# Drives semantic-release-style versioning from Conventional Commits
+# (https://www.conventionalcommits.org) on every merge to main. `cog bump
+# --auto` picks major/minor/patch from the commits since the last tag,
+# updates CHANGELOG.md, and creates the tag; see
+# .github/workflows/release.yml for how it's invoked in CI.
+
+from_latest_tag = true
+tag_prefix = "v"
+ignore_merge_commits = true
+skip_untracked = true
+
+# v0.x.y: while the project is pre-1.0, a breaking change ("!" / BREAKING
+# CHANGE:) still only bumps the minor version, matching semver's own
+# pre-1.0 convention rather than jumping to a nonexistent 1.0 unannounced.
+skip_ci = "[skip ci]"
+branch_whitelist = ["main"]
+
+[git_hooks]
+
+[commit_types]
+feat = { changelog_title = "Features" }
+fix = { changelog_title = "Bug Fixes" }
+perf = { changelog_title = "Performance" }
+refactor = { changelog_title = "Refactoring" }
+docs = { changelog_title = "Documentation" }
+test = { changelog_title = "Testing" }
+chore = { changelog_title = "Miscellaneous" }
+ci = { changelog_title = "CI/CD" }
+
+[changelog]
+path = "CHANGELOG.md"
+remote = "github.com"
+repository = "infrastructure-mcp"
+owner = "your-org"

@@ -1,12 +1,21 @@
-// Command server runs the Infrastructure MCP Server over stdio.
+// Command server runs the Infrastructure MCP Server, either over stdio
+// (the default, for local IDE/agent launch) or as a remote Streamable
+// HTTP MCP endpoint (-transport http), so the same binary works with
+// clients that spawn a local subprocess and clients that only speak
+// remote MCP.
 package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -32,7 +41,15 @@ func run() error {
 	inventoryPath := flag.String("inventory", "configs/inventory.yaml", "path to the inventory YAML file")
 	knownHostsPath := flag.String("known-hosts", "", "path to the SSH known_hosts file used to verify target host keys (default: $HOME/.ssh/known_hosts)")
 	insecureHostKey := flag.Bool("insecure-ignore-host-key", false, "skip SSH host key verification entirely (lab/dev use only, never for production infrastructure)")
+	transportKind := flag.String("transport", "stdio", `MCP transport to serve: "stdio" (default, for local subprocess clients) or "http" (remote Streamable HTTP, for clients that connect over the network)`)
+	httpAddr := flag.String("http-addr", ":8080", `address to listen on when -transport=http (e.g. ":8080")`)
+	healthcheck := flag.Bool("healthcheck", false, "instead of starting the server, GET -healthcheck-url and exit 0/1 on success/failure; used as the container HEALTHCHECK (the distroless base image has no shell/curl to run one externally)")
+	healthcheckURL := flag.String("healthcheck-url", "http://127.0.0.1:8080/healthz", "URL checked when -healthcheck is set")
 	flag.Parse()
+
+	if *healthcheck {
+		return runHealthcheck(*healthcheckURL)
+	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 
@@ -59,7 +76,7 @@ func run() error {
 	sshPool := ssh.NewPool(inv, poolOpts...)
 	telnetPool := telnet.NewPool(inv)
 	remotePool := remote.NewPool(inv, sshPool, telnetPool)
-	defer remotePool.Close()
+	defer func() { _ = remotePool.Close() }()
 	linuxClient := linux.New(remotePool)
 	dockerClient := docker.New(remotePool)
 
@@ -85,6 +102,67 @@ func run() error {
 	tools.RegisterDockerLogs(server, logger, dockerClient)
 	tools.RegisterDockerRestart(server, logger, dockerClient)
 
-	logger.Info("starting server", "transport", "stdio")
-	return server.Run(context.Background(), &mcp.StdioTransport{})
+	switch *transportKind {
+	case "stdio":
+		logger.Info("starting server", "transport", "stdio")
+		return server.Run(context.Background(), &mcp.StdioTransport{})
+	case "http":
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return runHTTP(ctx, server, logger, *httpAddr)
+	default:
+		return fmt.Errorf("unknown -transport %q (want %q or %q)", *transportKind, "stdio", "http")
+	}
+}
+
+// runHealthcheck performs a single GET against url and returns nil only
+// on a 2xx response, so it can double as the container HEALTHCHECK
+// command (`infrastructure-mcp -healthcheck`) on a base image with no
+// shell, curl, or wget.
+func runHealthcheck(url string) error {
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return fmt.Errorf("healthcheck: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("healthcheck: %s returned status %d", url, resp.StatusCode)
+	}
+	return nil
+}
+
+// runHTTP serves the MCP server over Streamable HTTP
+// (https://modelcontextprotocol.io/specification/2025-06-18/basic/transports),
+// the remote transport most IDEs and hosted agents speak, until ctx is
+// canceled. The same *mcp.Server instance is reused across sessions,
+// which the SDK documents as safe: "It is OK for getServer to return the
+// same server multiple times."
+func runHTTP(ctx context.Context, server *mcp.Server, logger *slog.Logger, addr string) error {
+	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.Handle("/mcp", handler)
+
+	httpServer := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+
+	errCh := make(chan error, 1)
+	go func() {
+		logger.Info("starting server", "transport", "http", "addr", addr, "endpoint", "/mcp")
+		errCh <- httpServer.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return fmt.Errorf("http server: %w", err)
+		}
+		return nil
+	case <-ctx.Done():
+		logger.Info("shutting down http server")
+		return httpServer.Shutdown(context.Background())
+	}
 }

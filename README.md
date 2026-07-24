@@ -19,6 +19,7 @@ A self-hosted [Model Context Protocol](https://modelcontextprotocol.io) server t
 - [Tool Design Philosophy](#tool-design-philosophy)
 - [Security](#security)
 - [Development](#development)
+- [CI/CD](#cicd)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [License](#license)
@@ -179,6 +180,9 @@ Tools implemented and tested against the real MCP protocol so far:
 - Structured error contract on every tool (`message`, `recommendation`, `retryable`, `category`)
 - Structured per-execution logging (`tool`, `user`, `target`, `duration`, `result`, `error`)
 - Host-key verification fail-closed by default, with explicit opt-outs for lab use
+- Dual MCP transport: stdio (local subprocess clients) and Streamable HTTP (remote clients), from the same binary
+- Docker image (multi-arch, GHCR) + Docker Compose, with a self-check `-healthcheck` mode for shell-less containers
+- CI/CD: PR-gated build/vet/lint/race-tested-CI, automatic semantic versioning + changelog + image publish + Trivy scan on merge to `main` — see [CI/CD](#cicd)
 
 See [Roadmap](#roadmap) for what's next.
 
@@ -198,6 +202,22 @@ See [Roadmap](#roadmap) for what's next.
 git clone https://github.com/<your-org>/infrastructure-mcp.git
 cd infrastructure-mcp
 go build -o bin/infrastructure-mcp ./cmd/server
+```
+
+### Or run via Docker
+
+Pre-built multi-arch images (`linux/amd64`, `linux/arm64`) are published to GHCR on every merge to `main` (see [CI/CD](#cicd)):
+
+```bash
+docker pull ghcr.io/<your-org>/infrastructure-mcp:latest
+```
+
+Or with Docker Compose, which wires up the inventory and SSH volume mounts for you — see [`docker-compose.yaml`](docker-compose.yaml):
+
+```bash
+cp configs/inventory.example.yaml inventory.yaml   # fill in your real targets
+cp .env.example .env                                # fill in real secrets, never commit
+docker compose up -d
 ```
 
 ### Run tests
@@ -275,7 +295,8 @@ proxmox:
 ./bin/infrastructure-mcp \
   -inventory configs/inventory.yaml \
   -known-hosts ~/.ssh/known_hosts \
-  -insecure-ignore-host-key=false
+  -insecure-ignore-host-key=false \
+  -transport stdio
 ```
 
 | Flag | Default | Description |
@@ -283,6 +304,9 @@ proxmox:
 | `-inventory` | `configs/inventory.yaml` | Path to the inventory YAML file |
 | `-known-hosts` | `$HOME/.ssh/known_hosts` | Path used to verify target SSH host keys |
 | `-insecure-ignore-host-key` | `false` | Skip host key verification entirely — **lab/dev only, never production** |
+| `-transport` | `stdio` | `stdio` (local subprocess clients) or `http` (remote Streamable HTTP clients) |
+| `-http-addr` | `:8080` | Address to listen on when `-transport=http` |
+| `-healthcheck` | `false` | Instead of starting the server, GET `-healthcheck-url` and exit 0/1 — used as the container `HEALTHCHECK` |
 
 Host key verification is **fail-closed by default**: an unrecognized target's connection is refused unless it's in `known_hosts` or you explicitly opt into insecure mode.
 
@@ -290,7 +314,12 @@ Host key verification is **fail-closed by default**: an unrecognized target's co
 
 ## Connecting an AI Agent
 
-Infrastructure MCP Server speaks MCP over stdio. Point any MCP-capable client at the built binary, for example in Claude Desktop's `claude_desktop_config.json`:
+Infrastructure MCP Server supports two transports from the same binary, so it works with both local-subprocess and remote-network MCP clients:
+
+- **stdio** (default) — the client spawns the binary itself and talks over its stdin/stdout. This is what most desktop IDEs and agent CLIs (Claude Desktop, Claude Code, Cursor) expect.
+- **Streamable HTTP** (`-transport http`) — the server listens on the network (`/mcp` endpoint, plus `/healthz`) and any remote MCP client connects over HTTP. Use this when the server runs elsewhere (a container, a VM, behind a reverse proxy) rather than on the same machine as the client.
+
+### stdio (local)
 
 ```json
 {
@@ -303,7 +332,30 @@ Infrastructure MCP Server speaks MCP over stdio. Point any MCP-capable client at
 }
 ```
 
-Once connected, the agent sees only the tools listed under [Current Features](#current-features) — never raw shell access, never credentials.
+### Remote HTTP
+
+Start the server with the HTTP transport (or `docker compose up -d`, which does this by default — see [Installation](#installation)):
+
+```bash
+./bin/infrastructure-mcp -inventory configs/inventory.yaml -transport http -http-addr :8080
+```
+
+Then point any remote-MCP-capable client at `http://<host>:8080/mcp`. For clients that only support stdio, bridge with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) or an equivalent local proxy:
+
+```json
+{
+  "mcpServers": {
+    "infrastructure": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://<host>:8080/mcp"]
+    }
+  }
+}
+```
+
+Put the HTTP endpoint behind TLS and network-level access control (a reverse proxy, VPN, or private network) before exposing it beyond localhost — the server itself does not add its own transport-layer authentication.
+
+Once connected, over either transport, the agent sees only the tools listed under [Current Features](#current-features) — never raw shell access, never credentials.
 
 ---
 
@@ -405,6 +457,31 @@ Found a security issue? Please report it privately rather than opening a public 
 
 ---
 
+## CI/CD
+
+Two GitHub Actions workflows, both required for anyone contributing:
+
+### `ci.yml` — required for every PR into `main`
+
+Runs on every pull request and on push to `main`:
+
+- **test** — `go build ./...`, `go vet ./...`, a `gofmt -l` formatting check, and `go test ./... -race -cover`
+- **lint** — [`golangci-lint`](https://golangci-lint.run) against [`.golangci.yml`](.golangci.yml) (errcheck, staticcheck, govet, gosec, and more)
+
+Branch protection on `main` **must be configured by a repo admin** (this is a repository setting, not something a workflow file can enforce) to require both the `test` and `lint` jobs to pass, and to require a pull request before merging — that gate only takes effect once the setting is turned on.
+
+If "require a pull request" is enabled, also add `github-actions[bot]` to that rule's bypass list (or exempt admins, since the release workflow runs as `github-actions[bot]`) — otherwise `release.yml`'s version-bump commit, which pushes straight to `main`, will be rejected by the same rule it's meant to satisfy.
+
+### `release.yml` — runs on every merge to `main`
+
+1. **Version + changelog** — [Cocogitto](https://docs.cocogitto.io) reads [Conventional Commits](https://www.conventionalcommits.org) since the last tag (config: [`cog.toml`](cog.toml)), computes the next semver, updates [`CHANGELOG.md`](CHANGELOG.md), commits, and pushes both the commit and the `vX.Y.Z` tag to `main`. A merge with no releasable commits (e.g. docs/chore-only) skips the rest of the pipeline.
+2. **Build & scan** — builds the Docker image and scans it with [Trivy](https://trivy.dev) *before* publishing; a CRITICAL/HIGH finding blocks the release. Results are uploaded to the repo's Security tab either way.
+3. **Publish** — once the scan is clean, builds and pushes the multi-arch (`linux/amd64`, `linux/arm64`) image to `ghcr.io/<org>/infrastructure-mcp`, tagged `latest` and `vX.Y.Z`.
+
+Commit messages therefore need to follow Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, ...) — see [Contributing](#contributing).
+
+---
+
 ## Roadmap
 
 Implemented versions are listed under [Current Features](#current-features) and tracked feature-by-feature in [`PROGRESS.md`](PROGRESS.md). Everything below is **not started**.
@@ -477,8 +554,9 @@ Contributions are welcome — this is an early-stage project and there's a lot o
 2. Follow the existing package/adapter pattern: one isolated package per integration under `internal/`, a matching set of tools under `mcp/tools/`, wired into `cmd/server/main.go`.
 3. Match the existing conventions: structured errors via `internal/toolerr`, structured logging via the `withLogging` wrapper, inventory-driven targets, no shell interpolation of user input.
 4. Add tests — unit tests for adapters/parsing, and at least one test that exercises new tools through the real MCP protocol.
-5. Run `go build ./... && go vet ./... && gofmt -l . && go test ./... -race -cover` before opening a PR.
-6. Open a pull request describing what changed and why.
+5. Run `go build ./... && go vet ./... && gofmt -l . && go test ./... -race -cover` and, if you have it installed, `golangci-lint run ./...` before opening a PR — this is exactly what `ci.yml` runs, and it's a **required, non-optional check** on every PR into `main` (see [CI/CD](#cicd)).
+6. Use [Conventional Commits](https://www.conventionalcommits.org) for your commit messages (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`, `ci:`, ...) — the version bump, `CHANGELOG.md`, and release on merge are generated automatically from them.
+7. Open a pull request describing what changed and why.
 
 For larger changes (a new adapter, a new version's worth of tools), consider opening an issue first to discuss the approach.
 
