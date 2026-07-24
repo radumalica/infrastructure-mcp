@@ -106,7 +106,7 @@ Three layers, wired top-down:
 
 | Concern | Choice |
 |---|---|
-| Language | Go 1.24+ |
+| Language | Go 1.26+ |
 | MCP SDK | Official [Model Context Protocol Go SDK](https://github.com/modelcontextprotocol/go-sdk) |
 | Configuration | YAML (`go-playground/validator`) |
 | Logging | `log/slog` (structured, JSON) |
@@ -130,9 +130,9 @@ infrastructure-mcp/
 │   ├── linux/                  # Linux diagnostics adapter
 │   ├── docker/                  # Docker CLI-over-SSH adapter
 │   ├── toolerr/                  # structured error contract
-│   ├── kubernetes/                # planned
+│   ├── kubernetes/
+│   ├── grafana/
 │   ├── proxmox/                    # planned
-│   ├── grafana/                     # planned
 │   ├── prometheus/, loki/            # planned
 │   ├── cisco/, mikrotik/, unifi/      # planned
 │   └── homeassistant/                  # planned
@@ -175,6 +175,19 @@ Tools implemented and tested against the real MCP protocol so far:
 - `docker_logs` — recent combined stdout/stderr log lines
 - `docker_restart` — restart a container (destructive; requires `confirm: true`)
 
+**Kubernetes (v0.4)**
+- `kubectl_get_pods` — list pods, optionally scoped to a namespace
+- `kubectl_logs` — fetch a pod/container's log lines
+- `kubectl_events` — recent cluster events, most recent first
+- `kubectl_describe` — structured pod summary (spec/status highlights + recent events)
+- `kubectl_nodes` — node list with readiness, roles, and capacity
+
+**Grafana (v0.5)**
+- `grafana_alerts` — currently firing/resolved alert instances from the alerting API
+- `grafana_dashboards` — search dashboards by title text and/or tag
+- `grafana_annotations` — annotations, optionally scoped to a time range and/or tags
+- `grafana_query` — raw query against one datasource (PromQL/LogQL/SQL/...); response is a datasource-specific passthrough, not normalized
+
 **Cross-cutting, since v0.1**
 - Legacy network device support: Telnet transport, SSH legacy-crypto negotiation, transparent per-target protocol dispatch
 - Structured error contract on every tool (`message`, `recommendation`, `retryable`, `category`)
@@ -192,7 +205,7 @@ See [Roadmap](#roadmap) for what's next.
 
 ### Prerequisites
 
-- Go 1.24 or newer
+- Go 1.26 or newer (bumped from 1.24 in v0.4 — required by `k8s.io/client-go`'s current release train)
 - SSH access (key- or password-based) to the servers/devices you want to manage
 - An MCP-capable client (Claude Desktop, Claude Code, Cursor, or any other MCP client)
 
@@ -290,6 +303,13 @@ proxmox:
   lab:
     url: https://pve.lab.local:8006
     token: ${PROXMOX_TOKEN}
+
+# All auth (client cert, bearer token, exec plugin, ...) lives inside the
+# kubeconfig file itself — nothing is inlined into the inventory.
+kubernetes:
+  home:
+    kubeconfig: /etc/infrastructure-mcp/kubeconfig-home
+    context: home-admin
 ```
 
 **Secrets are never written in plaintext.** Any `${VAR}` in the YAML is resolved from the process environment at load time, and load fails closed if the variable is unset — real credentials are never committed to the repo.
@@ -495,19 +515,6 @@ Commit messages therefore need to follow Conventional Commits (`feat:`, `fix:`, 
 ## Roadmap
 
 Implemented versions are listed under [Current Features](#current-features) and tracked feature-by-feature in [`PROGRESS.md`](PROGRESS.md). Everything below is **not started**.
-
-### v0.4 — Kubernetes
-- `kubectl_get_pods`
-- `kubectl_logs`
-- `kubectl_events`
-- `kubectl_describe`
-- `kubectl_nodes`
-
-### v0.5 — Grafana
-- `grafana_alerts`
-- `grafana_dashboards`
-- `grafana_query`
-- `grafana_annotations`
 
 ### v0.6 — Proxmox
 - `proxmox_nodes`

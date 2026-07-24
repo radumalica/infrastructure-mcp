@@ -57,6 +57,19 @@ type ServiceEndpoint struct {
 	Password string `yaml:"password"`
 }
 
+// KubeCluster describes a Kubernetes cluster reachable via a kubeconfig
+// file. All authentication (client cert, bearer token, exec plugin, ...)
+// lives inside that kubeconfig — never inlined into the inventory itself.
+type KubeCluster struct {
+	// Kubeconfig is a path to a kubeconfig file readable by the server
+	// process (e.g. mounted read-only into the container).
+	Kubeconfig string `yaml:"kubeconfig" validate:"required"`
+
+	// Context selects a context within Kubeconfig. Empty uses the
+	// kubeconfig's current-context.
+	Context string `yaml:"context"`
+}
+
 // Inventory is the root document loaded from the inventory YAML file.
 //
 // Every category is a map keyed by name so a user with several instances
@@ -64,9 +77,10 @@ type ServiceEndpoint struct {
 // environment, a dozen switches, ...) lists them side by side under one
 // key instead of the schema only ever allowing one.
 type Inventory struct {
-	Servers  map[string]Server          `yaml:"servers"`
-	Routers  map[string]NetworkDevice   `yaml:"routers"`
-	Switches map[string]NetworkDevice   `yaml:"switches"`
-	Grafana  map[string]ServiceEndpoint `yaml:"grafana"`
-	Proxmox  map[string]ServiceEndpoint `yaml:"proxmox"`
+	Servers    map[string]Server          `yaml:"servers"`
+	Routers    map[string]NetworkDevice   `yaml:"routers"`
+	Switches   map[string]NetworkDevice   `yaml:"switches"`
+	Grafana    map[string]ServiceEndpoint `yaml:"grafana"`
+	Proxmox    map[string]ServiceEndpoint `yaml:"proxmox"`
+	Kubernetes map[string]KubeCluster     `yaml:"kubernetes"`
 }

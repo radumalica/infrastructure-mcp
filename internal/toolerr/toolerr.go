@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net"
 
+	"infrastructure-mcp/internal/grafana"
 	"infrastructure-mcp/internal/inventory"
 	"infrastructure-mcp/internal/ssh"
 )
@@ -90,6 +91,14 @@ func Wrap(err error) error {
 		return &Error{
 			Message:        err.Error(),
 			Recommendation: "Set a key or password for this server in the inventory, or make an SSH agent available.",
+			Retryable:      false,
+			Category:       CategoryAuth,
+			cause:          err,
+		}
+	case errors.Is(err, grafana.ErrUnauthorized):
+		return &Error{
+			Message:        err.Error(),
+			Recommendation: "Check the token/user/password for this Grafana instance in the inventory.",
 			Retryable:      false,
 			Category:       CategoryAuth,
 			cause:          err,

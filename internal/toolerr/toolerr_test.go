@@ -7,6 +7,7 @@ import (
 	"net"
 	"testing"
 
+	"infrastructure-mcp/internal/grafana"
 	"infrastructure-mcp/internal/inventory"
 	"infrastructure-mcp/internal/ssh"
 )
@@ -27,6 +28,7 @@ func TestWrap_Classification(t *testing.T) {
 		{"not found", inventory.ErrNotFound, CategoryNotFound, false},
 		{"no credentials", ssh.ErrNoCredentials, CategoryAuth, false},
 		{"no host key verification", ssh.ErrNoHostKeyVerification, CategoryAuth, false},
+		{"grafana unauthorized", grafana.ErrUnauthorized, CategoryAuth, false},
 		{"context deadline", context.DeadlineExceeded, CategoryTimeout, true},
 		{"context cancelled", context.Canceled, CategoryTimeout, true},
 		{"network error", &net.DNSError{IsTimeout: true, Err: "boom"}, CategoryNetwork, true},

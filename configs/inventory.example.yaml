@@ -65,3 +65,10 @@ proxmox:
   lab:
     url: https://pve.lab.local:8006
     token: ${PROXMOX_TOKEN}
+
+kubernetes:
+  # All auth (client cert, bearer token, exec plugin, ...) lives inside
+  # the kubeconfig file itself — nothing is inlined here.
+  home:
+    kubeconfig: /etc/infrastructure-mcp/kubeconfig-home
+    context: home-admin
