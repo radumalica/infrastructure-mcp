@@ -24,6 +24,11 @@ services:
       # this environment at container start.
       - GRAFANA_TOKEN=${GRAFANA_TOKEN:-}
       - PROXMOX_TOKEN=${PROXMOX_TOKEN:-}
+      # Required for -transport=http: the server refuses to start without
+      # it (or -allow-anonymous-http). Every request to /mcp must send
+      # `Authorization: Bearer <MCP_HTTP_TOKEN>`. Passed via env, not a
+      # CLI flag, so it never shows up in `docker inspect`/`ps` output.
+      - MCP_HTTP_TOKEN=${MCP_HTTP_TOKEN:?set MCP_HTTP_TOKEN in .env before starting}
     healthcheck:
       # distroless has no shell/curl/wget, so the binary checks itself:
       # -healthcheck does a single GET against -healthcheck-url and exits
