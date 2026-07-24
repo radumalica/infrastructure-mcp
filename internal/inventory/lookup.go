@@ -14,6 +14,16 @@ func (inv *Inventory) Server(name string) (Server, error) {
 	return s, nil
 }
 
+// KubeCluster returns the named Kubernetes cluster, or ErrNotFound if it
+// does not exist.
+func (inv *Inventory) KubeCluster(name string) (KubeCluster, error) {
+	k, ok := inv.Kubernetes[name]
+	if !ok {
+		return KubeCluster{}, fmt.Errorf("%w: kubernetes cluster %q", ErrNotFound, name)
+	}
+	return k, nil
+}
+
 // ServerNames returns the names of all servers, optionally filtered to
 // those carrying the given tag. An empty tag returns every server name.
 // Results are sorted for deterministic tool output.

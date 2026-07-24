@@ -18,6 +18,10 @@ services:
       - ./inventory.yaml:/app/configs/inventory.yaml:ro
       # SSH keys/known_hosts referenced by the inventory (read-only).
       - ${SSH_DIR:-~/.ssh}:/home/nonroot/.ssh:ro
+      # Uncomment and point at a real kubeconfig if your inventory has a
+      # `kubernetes:` section — mount it wherever the entry's `kubeconfig:`
+      # path says, read-only.
+      # - ./kubeconfig:/etc/infrastructure-mcp/kubeconfig-home:ro
     environment:
       # Populate from a local .env file (gitignored) — never commit real
       # secrets. Any ${VAR} referenced in inventory.yaml is resolved from

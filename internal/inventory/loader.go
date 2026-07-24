@@ -75,6 +75,11 @@ func (inv *Inventory) Validate() error {
 			return fmt.Errorf("inventory: proxmox %q: %w", name, err)
 		}
 	}
+	for name, k := range inv.Kubernetes {
+		if err := validate.Struct(k); err != nil {
+			return fmt.Errorf("inventory: kubernetes %q: %w", name, err)
+		}
+	}
 
 	return nil
 }

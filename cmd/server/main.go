@@ -23,6 +23,7 @@ import (
 
 	"infrastructure-mcp/internal/docker"
 	"infrastructure-mcp/internal/inventory"
+	"infrastructure-mcp/internal/kubernetes"
 	"infrastructure-mcp/internal/linux"
 	"infrastructure-mcp/internal/remote"
 	"infrastructure-mcp/internal/ssh"
@@ -65,6 +66,7 @@ func run() error {
 		"servers", len(inv.Servers),
 		"routers", len(inv.Routers),
 		"switches", len(inv.Switches),
+		"kubernetes", len(inv.Kubernetes),
 	)
 
 	var poolOpts []ssh.PoolOption
@@ -82,6 +84,7 @@ func run() error {
 	defer func() { _ = remotePool.Close() }()
 	linuxClient := linux.New(remotePool)
 	dockerClient := docker.New(remotePool)
+	kubeClient := kubernetes.New(inv)
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "infrastructure-mcp",
@@ -104,6 +107,11 @@ func run() error {
 	tools.RegisterDockerStats(server, logger, dockerClient)
 	tools.RegisterDockerLogs(server, logger, dockerClient)
 	tools.RegisterDockerRestart(server, logger, dockerClient)
+	tools.RegisterKubectlGetPods(server, logger, kubeClient)
+	tools.RegisterKubectlLogs(server, logger, kubeClient)
+	tools.RegisterKubectlEvents(server, logger, kubeClient)
+	tools.RegisterKubectlDescribe(server, logger, kubeClient)
+	tools.RegisterKubectlNodes(server, logger, kubeClient)
 
 	switch *transportKind {
 	case "stdio":

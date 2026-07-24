@@ -40,6 +40,11 @@ proxmox:
   lab:
     url: https://pve.lab.local:8006
     token: static-token
+
+kubernetes:
+  home:
+    kubeconfig: /etc/infrastructure-mcp/kubeconfig-home
+    context: home-admin
 `
 
 func TestParse_Valid(t *testing.T) {
@@ -70,6 +75,9 @@ func TestParse_Valid(t *testing.T) {
 	}
 	if inv.Routers["core"].Vendor != "cisco" {
 		t.Errorf("unexpected router vendor: %s", inv.Routers["core"].Vendor)
+	}
+	if len(inv.Kubernetes) != 1 || inv.Kubernetes["home"].Context != "home-admin" {
+		t.Errorf("unexpected kubernetes entries: %+v", inv.Kubernetes)
 	}
 }
 
@@ -150,6 +158,27 @@ func TestServer_Lookup(t *testing.T) {
 	}
 
 	_, err = inv.Server("does-not-exist")
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestKubeCluster_Lookup(t *testing.T) {
+	t.Setenv("TEST_GRAFANA_TOKEN", "secret-token")
+	inv, err := Parse([]byte(validYAML))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+
+	k, err := inv.KubeCluster("home")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if k.Kubeconfig != "/etc/infrastructure-mcp/kubeconfig-home" {
+		t.Errorf("unexpected kubeconfig path: %s", k.Kubeconfig)
+	}
+
+	_, err = inv.KubeCluster("does-not-exist")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
