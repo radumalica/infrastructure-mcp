@@ -10,6 +10,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"infrastructure-mcp/internal/docker"
 	"infrastructure-mcp/internal/inventory"
 	"infrastructure-mcp/internal/linux"
 	"infrastructure-mcp/internal/remote"
@@ -60,6 +61,7 @@ func run() error {
 	remotePool := remote.NewPool(inv, sshPool, telnetPool)
 	defer remotePool.Close()
 	linuxClient := linux.New(remotePool)
+	dockerClient := docker.New(remotePool)
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "infrastructure-mcp",
@@ -77,6 +79,11 @@ func run() error {
 	tools.RegisterRunningProcesses(server, logger, linuxClient)
 	tools.RegisterJournalErrors(server, logger, linuxClient)
 	tools.RegisterKernelVersion(server, logger, linuxClient)
+	tools.RegisterDockerPs(server, logger, dockerClient)
+	tools.RegisterDockerImages(server, logger, dockerClient)
+	tools.RegisterDockerStats(server, logger, dockerClient)
+	tools.RegisterDockerLogs(server, logger, dockerClient)
+	tools.RegisterDockerRestart(server, logger, dockerClient)
 
 	logger.Info("starting server", "transport", "stdio")
 	return server.Run(context.Background(), &mcp.StdioTransport{})

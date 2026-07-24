@@ -30,6 +30,7 @@ func TestWrap_Classification(t *testing.T) {
 		{"context deadline", context.DeadlineExceeded, CategoryTimeout, true},
 		{"context cancelled", context.Canceled, CategoryTimeout, true},
 		{"network error", &net.DNSError{IsTimeout: true, Err: "boom"}, CategoryNetwork, true},
+		{"invalid input", ErrInvalidInput, CategoryInvalidInput, false},
 		{"unknown error", errors.New("something broke"), CategoryInternal, false},
 	}
 

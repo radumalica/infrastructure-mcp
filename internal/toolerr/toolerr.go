@@ -18,12 +18,19 @@ import (
 type Category string
 
 const (
-	CategoryNotFound Category = "not_found"
-	CategoryAuth     Category = "auth"
-	CategoryNetwork  Category = "network"
-	CategoryTimeout  Category = "timeout"
-	CategoryInternal Category = "internal"
+	CategoryNotFound     Category = "not_found"
+	CategoryAuth         Category = "auth"
+	CategoryNetwork      Category = "network"
+	CategoryTimeout      Category = "timeout"
+	CategoryInvalidInput Category = "invalid_input"
+	CategoryInternal     Category = "internal"
 )
+
+// ErrInvalidInput is a sentinel for input-validation failures (e.g. a
+// container name/ID that fails the docker naming pattern). Adapters wrap
+// it with fmt.Errorf("...: %w", ErrInvalidInput) so Wrap can classify it
+// without string matching.
+var ErrInvalidInput = errors.New("toolerr: invalid input")
 
 // Error is the structured shape every tool returns on failure. Its
 // Error() method renders as JSON, so it survives the MCP SDK's default
@@ -63,6 +70,14 @@ func Wrap(err error) error {
 	}
 
 	switch {
+	case errors.Is(err, ErrInvalidInput):
+		return &Error{
+			Message:        err.Error(),
+			Recommendation: "Fix the request parameters and try again.",
+			Retryable:      false,
+			Category:       CategoryInvalidInput,
+			cause:          err,
+		}
 	case errors.Is(err, inventory.ErrNotFound):
 		return &Error{
 			Message:        err.Error(),
