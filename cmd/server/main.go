@@ -22,6 +22,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"infrastructure-mcp/internal/docker"
+	"infrastructure-mcp/internal/grafana"
 	"infrastructure-mcp/internal/inventory"
 	"infrastructure-mcp/internal/kubernetes"
 	"infrastructure-mcp/internal/linux"
@@ -67,6 +68,7 @@ func run() error {
 		"routers", len(inv.Routers),
 		"switches", len(inv.Switches),
 		"kubernetes", len(inv.Kubernetes),
+		"grafana", len(inv.Grafana),
 	)
 
 	var poolOpts []ssh.PoolOption
@@ -85,6 +87,7 @@ func run() error {
 	linuxClient := linux.New(remotePool)
 	dockerClient := docker.New(remotePool)
 	kubeClient := kubernetes.New(inv)
+	grafanaClient := grafana.New(inv, nil)
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "infrastructure-mcp",
@@ -112,6 +115,10 @@ func run() error {
 	tools.RegisterKubectlEvents(server, logger, kubeClient)
 	tools.RegisterKubectlDescribe(server, logger, kubeClient)
 	tools.RegisterKubectlNodes(server, logger, kubeClient)
+	tools.RegisterGrafanaAlerts(server, logger, grafanaClient)
+	tools.RegisterGrafanaDashboards(server, logger, grafanaClient)
+	tools.RegisterGrafanaAnnotations(server, logger, grafanaClient)
+	tools.RegisterGrafanaQuery(server, logger, grafanaClient)
 
 	switch *transportKind {
 	case "stdio":

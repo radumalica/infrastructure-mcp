@@ -24,6 +24,18 @@ func (inv *Inventory) KubeCluster(name string) (KubeCluster, error) {
 	return k, nil
 }
 
+// GrafanaEndpoint returns the named Grafana instance, or ErrNotFound if
+// it does not exist. (Named GrafanaEndpoint, not Grafana, because
+// Inventory already has a Grafana field — Go forbids a method and a
+// field sharing a name on the same type.)
+func (inv *Inventory) GrafanaEndpoint(name string) (ServiceEndpoint, error) {
+	g, ok := inv.Grafana[name]
+	if !ok {
+		return ServiceEndpoint{}, fmt.Errorf("%w: grafana instance %q", ErrNotFound, name)
+	}
+	return g, nil
+}
+
 // ServerNames returns the names of all servers, optionally filtered to
 // those carrying the given tag. An empty tag returns every server name.
 // Results are sorted for deterministic tool output.

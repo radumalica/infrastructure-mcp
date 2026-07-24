@@ -22,7 +22,7 @@ This file is the single progress log — updated after each completed feature, w
 | pre-v1.0 | CI/CD (PR-gated lint+test, semantic-release via Cocogitto, GHCR image publish, Trivy scan), Docker/Compose packaging, remote HTTP MCP transport — user request, cross-cutting infra ahead of schedule | done |
 | pre-v1.0 | Fail-closed bearer-token auth on `-transport=http` (`MCP_HTTP_TOKEN`, `-allow-anonymous-http` opt-out) — security fix, shipped standalone ahead of schedule | done |
 | v0.4 | Kubernetes (kubectl_get_pods, kubectl_logs, kubectl_events, kubectl_describe, kubectl_nodes) | done |
-| v0.5+ | Grafana | not started |
+| v0.5 | Grafana (grafana_alerts, grafana_dashboards, grafana_annotations, grafana_query) | done |
 | v0.6+ | Proxmox | not started |
 | v0.7+ | Networking (Cisco/MikroTik/UniFi) | not started |
 | v0.8+ | Monitoring (Prometheus/Loki/Alertmanager) | not started |
@@ -165,6 +165,18 @@ Cut fresh from `origin/main` after the security-fix PR (#4) merged, per the spli
 - `configs/inventory.example.yaml`, the README inventory example, and `docker-compose.yaml` (commented optional kubeconfig volume mount) all updated to match; confirmed the shipped example file still loads cleanly under the new schema (not just the inline test fixture) via `inventory.Load`.
 - README: v0.4 moved from Roadmap to Current Features (5 new tool bullets), `internal/kubernetes/` un-marked `# planned` in the architecture tree, per the standing close-out instruction.
 - All verified end-to-end where possible: full local gate (`gofmt`/`build`/`vet`/`golangci-lint`/`go test -race -cover`, all green, 0 lint issues even with the new client-go dependency surface) plus `docker compose config` re-validated against the updated compose file.
+
+### 2026-07-24 — v0.5: Grafana (grafana_alerts, grafana_dashboards, grafana_annotations, grafana_query)
+Continued straight on top of the v0.4 Kubernetes work (branch `v0.5-grafana`, cut from `v0.4-kubernetes`'s HEAD) per explicit user instruction to skip opening v0.4's PR for now and move straight to the next feature — v0.4 remains committed/pushed but not yet PR'd.
+
+- **First HTTP-API-based adapter** (`internal/grafana`), as opposed to SSH-exec (`internal/docker`) or a Go client library (`internal/kubernetes`) — a thin `net/http` client resolving instances via the existing `Grafana map[string]ServiceEndpoint` inventory category (already multi-instance-by-name from the earlier Grafana/Proxmox fix). Auth: `Authorization: Bearer <token>` if `token` is set on the instance, else HTTP basic auth from `user`/`password` — never both.
+- **Verified all four endpoint contracts against Grafana's real API docs via Context7 before writing request/response code**, rather than reconstructing from memory — this project has been burned twice before by recalled-not-verified API/tool behavior (see the CI/CD workflow lessons above). Confirmed: `GET /api/alertmanager/grafana/api/v2/alerts` (Alertmanager-compatible alert *instances*, not rule definitions — `status.state`/`labels`/`annotations`/`startsAt`/`endsAt`/`fingerprint`/`generatorURL`), `GET /api/search?type=dash-db` (dashboard search), `GET /api/annotations` (time-range/tag-filterable), `POST /api/ds/query` (body: `{queries: [{refId, datasource: {uid}, expr}], from, to}`).
+- **`grafana_query`'s output is a deliberate passthrough, not normalized** — `POST /api/ds/query` returns Grafana "data frames" whose shape is datasource-specific (a Prometheus matrix, a Loki stream, and a SQL table all serialize differently); normalizing all of them is out of v0.5 scope. Documented on `QueryResult`'s doc comment and the tool's description string so this isn't mistaken for an oversight later — same pattern as `DescribePod` not porting `kubectl describe`'s free-text format, just in the opposite direction (that one intentionally structures a free-text original; this one intentionally leaves a structured-but-varying original as-is).
+- New `toolerr` case: `grafana.ErrUnauthorized` (mapped from HTTP 401/403) classifies to `CategoryAuth`; HTTP 404 reuses the existing `inventory.ErrNotFound` sentinel so instance-not-found and path-not-found both surface the same structured `not_found` category.
+- Tested against `httptest.NewServer` returning canned JSON (not a hand-rolled mock) — asserts the auth header is actually sent (both bearer and basic-auth cases), request bodies for the POST query endpoint, and that 401/403/404 map through `toolerr.Wrap` correctly. `internal/grafana` 80.4% coverage, `mcp/tools` 98.4%.
+- Added `Inventory.GrafanaEndpoint(name)` lookup accessor — named `GrafanaEndpoint`, not `Grafana`, because `Inventory.Grafana` is already a field name and Go forbids a method/field name collision on the same type.
+- README: v0.5 moved from Roadmap to Current Features (4 new tool bullets), `internal/grafana/` un-marked `# planned` in the architecture tree.
+- Full local gate re-run clean: `gofmt`, `go build`, `go vet`, `golangci-lint run` (0 issues), `go test ./... -race -cover` (all green).
 
 ## Decisions & Deviations from a literal README reading
 

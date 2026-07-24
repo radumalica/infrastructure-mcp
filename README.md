@@ -131,8 +131,8 @@ infrastructure-mcp/
 │   ├── docker/                  # Docker CLI-over-SSH adapter
 │   ├── toolerr/                  # structured error contract
 │   ├── kubernetes/
+│   ├── grafana/
 │   ├── proxmox/                    # planned
-│   ├── grafana/                     # planned
 │   ├── prometheus/, loki/            # planned
 │   ├── cisco/, mikrotik/, unifi/      # planned
 │   └── homeassistant/                  # planned
@@ -181,6 +181,12 @@ Tools implemented and tested against the real MCP protocol so far:
 - `kubectl_events` — recent cluster events, most recent first
 - `kubectl_describe` — structured pod summary (spec/status highlights + recent events)
 - `kubectl_nodes` — node list with readiness, roles, and capacity
+
+**Grafana (v0.5)**
+- `grafana_alerts` — currently firing/resolved alert instances from the alerting API
+- `grafana_dashboards` — search dashboards by title text and/or tag
+- `grafana_annotations` — annotations, optionally scoped to a time range and/or tags
+- `grafana_query` — raw query against one datasource (PromQL/LogQL/SQL/...); response is a datasource-specific passthrough, not normalized
 
 **Cross-cutting, since v0.1**
 - Legacy network device support: Telnet transport, SSH legacy-crypto negotiation, transparent per-target protocol dispatch
@@ -509,12 +515,6 @@ Commit messages therefore need to follow Conventional Commits (`feat:`, `fix:`, 
 ## Roadmap
 
 Implemented versions are listed under [Current Features](#current-features) and tracked feature-by-feature in [`PROGRESS.md`](PROGRESS.md). Everything below is **not started**.
-
-### v0.5 — Grafana
-- `grafana_alerts`
-- `grafana_dashboards`
-- `grafana_query`
-- `grafana_annotations`
 
 ### v0.6 — Proxmox
 - `proxmox_nodes`

@@ -184,6 +184,27 @@ func TestKubeCluster_Lookup(t *testing.T) {
 	}
 }
 
+func TestGrafanaEndpoint_Lookup(t *testing.T) {
+	t.Setenv("TEST_GRAFANA_TOKEN", "secret-token")
+	inv, err := Parse([]byte(validYAML))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+
+	g, err := inv.GrafanaEndpoint("main")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if g.URL != "https://grafana.lab.local" {
+		t.Errorf("unexpected grafana url: %s", g.URL)
+	}
+
+	_, err = inv.GrafanaEndpoint("does-not-exist")
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
 func TestServerNames_FilterByTag(t *testing.T) {
 	t.Setenv("TEST_GRAFANA_TOKEN", "secret-token")
 	inv, err := Parse([]byte(validYAML))
