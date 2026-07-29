@@ -27,7 +27,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-          persist-credentials: false
+          
 
       - name: Conventional commit check
         uses: cocogitto/cocogitto-action@9a9fe03b31c47444290c0d7f9b1ee1b44ee13f20 #v4.1.0
