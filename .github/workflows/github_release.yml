@@ -48,13 +48,32 @@ jobs:
           git-user: 'GitHub Build'
           git-user-email: 'github@users.noreply.github.com'
 
-      - name: Generate a Changelog
-        run: cog changelog --at ${{ steps.release.outputs.version }} > CHANGELOG.md
+      # `cog bump --auto` (above) only commits and tags the version bump
+      # locally; cocogitto never pushes on its own (that requires an
+      # explicit `post_bump_hooks` we don't have configured). Without this
+      # step the bump commit — and the CHANGELOG.md update it already made
+      # — is silently discarded when the runner exits, and the release
+      # body ends up citing a commit that was never pushed to origin.
+      # Two explicit pushes, not `git push --follow-tags`: cocogitto
+      # creates lightweight tags, which `--follow-tags` only pushes
+      # annotated ones.
+      - name: Push version bump commit and tag
+        run: |
+          git push origin HEAD:main
+          git push origin --tags
+
+      # Scoped to just this release, for the GitHub release body only —
+      # deliberately separate from CHANGELOG.md, which `cog bump` already
+      # updated (full accumulated history) and which the push above just
+      # persisted. Writing `cog changelog --at ... > CHANGELOG.md` here
+      # would truncate that accumulated file down to only this version.
+      - name: Generate release notes
+        run: cog changelog --at ${{ steps.release.outputs.version }} > release-notes.md
 
       - name: Upload github release
         uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 #v2.3
         with:
-          body_path: CHANGELOG.md
+          body_path: release-notes.md
           tag_name: ${{ steps.release.outputs.version }}
 
   docker:
