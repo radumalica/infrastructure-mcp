@@ -18,7 +18,6 @@ jobs:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       contents: write
-      pull-requests: write
     outputs:
       version: ${{ steps.next_version.outputs.version }}
       has_release: ${{ steps.next_version.outputs.has_release }}
@@ -94,8 +93,8 @@ jobs:
           fi
 
       # Scoped to just this release, for the GitHub release body only —
-      # deliberately separate from CHANGELOG.md, which is updated in a PR
-      # below so protected branch rules are respected.
+      # deliberately separate from CHANGELOG.md, which is pushed to main
+      # directly below (see the App-token bypass step).
       - name: Generate release notes
         if: steps.next_version.outputs.has_release == 'true'
         run: cog changelog --at ${{ steps.next_version.outputs.version }} > release-notes.md
@@ -104,21 +103,39 @@ jobs:
         if: steps.next_version.outputs.has_release == 'true'
         run: cog changelog > CHANGELOG.md
 
-      - name: Open PR with CHANGELOG.md update
+      # GitHub Actions is not permitted to open PRs on this org, so PR-based
+      # changelog updates aren't an option. We push straight to main instead.
+      # The "update", "required_signatures" and "pull_request" rules on the
+      # main-rules ruleset block a plain push outright — the only way past
+      # them is a listed bypass_actor. This requires the release App's
+      # installation to be added to main-rules as an "Integration" bypass
+      # actor (an Admin *user* role bypass does NOT cover an App token).
+      - name: Generate GitHub App token
         if: steps.next_version.outputs.has_release == 'true'
-        uses: peter-evans/create-pull-request@v7
+        id: app_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 #v3.2.0
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "docs(changelog): update for ${{ steps.next_version.outputs.version }} [skip ci]"
-          title: "docs(changelog): update for ${{ steps.next_version.outputs.version }}"
-          body: |
-            Automated changelog update for ${{ steps.next_version.outputs.version }}.
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
-            This PR is opened by the release workflow to comply with branch protection
-            rules that require changes to go through pull requests.
-          branch: automation/changelog-${{ steps.next_version.outputs.version }}
-          delete-branch: true
-          add-paths: CHANGELOG.md
+      - name: Commit and push CHANGELOG.md to main
+        if: steps.next_version.outputs.has_release == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          APP_SLUG: ${{ steps.app_token.outputs.app-slug }}
+        run: |
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "No changelog changes to commit."
+          else
+            git commit -m "docs(changelog): update for ${{ steps.next_version.outputs.version }} [skip ci]"
+            git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:main
+          fi
 
       - name: Check if GitHub release exists
         if: steps.next_version.outputs.has_release == 'true'
