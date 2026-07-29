@@ -39,20 +39,34 @@ jobs:
         id: next_version
         run: |
           set +e
-          next_version=$(cog bump --auto --dry-run 2>&1)
+          stderr_file=$(mktemp)
+          cog_stdout=$(cog bump --auto --dry-run 2>"$stderr_file")
           bump_exit=$?
+          cog_stderr=$(cat "$stderr_file")
+          rm -f "$stderr_file"
           set -e
 
           if [ "$bump_exit" -eq 0 ]; then
+            # cog's dry-run version string is the last line of stdout;
+            # merging stderr in here (as `2>&1`) previously let cocogitto's
+            # own info/log lines ride along into $GITHUB_OUTPUT, and any
+            # embedded newline corrupts that file's key=value format for
+            # every step after it ("Invalid format 'v0.3.0'").
+            next_version=$(printf '%s\n' "$cog_stdout" | tail -n1 | tr -d '[:space:]')
+            if ! printf '%s' "$next_version" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+'; then
+              echo "cog bump succeeded but its output didn't look like a version:"
+              printf '%s\n' "$cog_stdout"
+              exit 1
+            fi
             echo "has_release=true" >> "$GITHUB_OUTPUT"
             echo "version=$next_version" >> "$GITHUB_OUTPUT"
-          elif echo "$next_version" | grep -Eiq "nothing to bump|no commits|no conventional commit"; then
+          elif printf '%s\n%s\n' "$cog_stdout" "$cog_stderr" | grep -Eiq "nothing to bump|no commits|no conventional commit"; then
             echo "No releasable commits found."
             echo "has_release=false" >> "$GITHUB_OUTPUT"
             echo "version=" >> "$GITHUB_OUTPUT"
           else
             echo "Unexpected cocogitto failure:"
-            echo "$next_version"
+            printf '%s\n%s\n' "$cog_stdout" "$cog_stderr"
             exit "$bump_exit"
           fi
 
