@@ -29,6 +29,12 @@ type Target struct {
 
 	Protocol     Protocol
 	LegacyCrypto bool
+
+	// Vendor is the NetworkDevice's vendor (e.g. "cisco", "mikrotik",
+	// "unifi") for routers/switches, or "" for servers (which have no
+	// vendor concept). Vendor-specific adapters use this to refuse to run
+	// their commands against a device of the wrong kind.
+	Vendor string
 }
 
 // ErrAmbiguousTarget is returned when a name exists in more than one
@@ -84,6 +90,7 @@ func networkDeviceTarget(name string, d NetworkDevice) Target {
 		ProxyJump:    d.ProxyJump,
 		Protocol:     protocol,
 		LegacyCrypto: d.LegacyCrypto,
+		Vendor:       d.Vendor,
 	}
 }
 
