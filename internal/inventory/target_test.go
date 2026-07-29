@@ -56,6 +56,9 @@ func TestTarget_Server(t *testing.T) {
 	if target.Key != "~/.ssh/archive" {
 		t.Errorf("Key = %q, want ~/.ssh/archive", target.Key)
 	}
+	if target.Vendor != "" {
+		t.Errorf("Vendor = %q, want empty for a server", target.Vendor)
+	}
 }
 
 func TestTarget_TelnetRouter(t *testing.T) {
@@ -73,6 +76,9 @@ func TestTarget_TelnetRouter(t *testing.T) {
 	}
 	if target.Password != "admin123" {
 		t.Errorf("Password = %q, want admin123", target.Password)
+	}
+	if target.Vendor != "cisco" {
+		t.Errorf("Vendor = %q, want cisco", target.Vendor)
 	}
 }
 
