@@ -27,6 +27,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          persist-credentials: false
 
       - name: Conventional commit check
         uses: cocogitto/cocogitto-action@9a9fe03b31c47444290c0d7f9b1ee1b44ee13f20 #v4.1.0
@@ -113,10 +114,11 @@ jobs:
       - name: Generate GitHub App token
         if: steps.next_version.outputs.has_release == 'true'
         id: app_token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 #v3.2.0
+        uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ secrets.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
 
       - name: Commit and push CHANGELOG.md to main
         if: steps.next_version.outputs.has_release == 'true'
@@ -131,11 +133,6 @@ jobs:
             echo "No changelog changes to commit."
           else
             git commit -m "docs(changelog): update for ${{ steps.next_version.outputs.version }} [skip ci]"
-            # actions/checkout persists GITHUB_TOKEN as an http.extraheader, which
-            # git sends on top of (and instead of) any userinfo in the remote URL.
-            # Without clearing it, this push authenticates as the write-only
-            # GITHUB_TOKEN, not the App, and the ruleset bypass never applies.
-            git config --local --unset-all http.https://github.com/.extraheader || true
             git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
             git fetch origin main
             git rebase origin/main
