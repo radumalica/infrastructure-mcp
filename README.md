@@ -500,13 +500,14 @@ Runs on every pull request and on push to `main`:
 
 Branch protection on `main` **must be configured by a repo admin** (this is a repository setting, not something a workflow file can enforce) to require both the `test` and `lint` jobs to pass, and to require a pull request before merging — that gate only takes effect once the setting is turned on.
 
-If "require a pull request" is enabled, also add `github-actions[bot]` to that rule's bypass list (or exempt admins, since the release workflow runs as `github-actions[bot]`) — otherwise `release.yml`'s version-bump commit, which pushes straight to `main`, will be rejected by the same rule it's meant to satisfy.
+The release pipeline is designed to work with protected `main`: it creates and pushes only the release tag, creates the GitHub release from that tag, and opens a separate PR for `CHANGELOG.md` updates.
 
 ### `release.yml` — runs on every merge to `main`
 
-1. **Version + changelog** — [Cocogitto](https://docs.cocogitto.io) reads [Conventional Commits](https://www.conventionalcommits.org) since the last tag (config: [`cog.toml`](cog.toml)), computes the next semver, updates [`CHANGELOG.md`](CHANGELOG.md), commits, and pushes both the commit and the `vX.Y.Z` tag to `main`. A merge with no releasable commits (e.g. docs/chore-only) skips the rest of the pipeline.
+1. **Version + tag** — [Cocogitto](https://docs.cocogitto.io) reads [Conventional Commits](https://www.conventionalcommits.org) since the last tag (config: [`cog.toml`](cog.toml)) and computes the next semver. The workflow then creates and pushes the `vX.Y.Z` tag (no direct commit push to `main`). A merge with no releasable commits (e.g. docs/chore-only) skips the rest of the pipeline.
 2. **Build & scan** — builds the Docker image and scans it with [Trivy](https://trivy.dev) *before* publishing; a CRITICAL/HIGH finding blocks the release. Results are uploaded to the repo's Security tab either way.
 3. **Publish** — once the scan is clean, builds and pushes the multi-arch (`linux/amd64`, `linux/arm64`) image to `ghcr.io/<org>/infrastructure-mcp`, tagged `latest` and `vX.Y.Z`.
+4. **Changelog PR** — the workflow regenerates [`CHANGELOG.md`](CHANGELOG.md) and opens an automated PR so changelog updates still go through normal branch protection and review.
 
 Commit messages therefore need to follow Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, ...) — see [Contributing](#contributing).
 
