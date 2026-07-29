@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net"
 
+	"infrastructure-mcp/internal/cisco"
 	"infrastructure-mcp/internal/grafana"
 	"infrastructure-mcp/internal/inventory"
 	"infrastructure-mcp/internal/proxmox"
@@ -100,6 +101,22 @@ func Wrap(err error) error {
 		return &Error{
 			Message:        err.Error(),
 			Recommendation: "Check the token/user/password for this Grafana instance in the inventory.",
+			Retryable:      false,
+			Category:       CategoryAuth,
+			cause:          err,
+		}
+	case errors.Is(err, cisco.ErrWrongVendor):
+		return &Error{
+			Message:        err.Error(),
+			Recommendation: "Check the device's vendor in the inventory, or use the tool matching that vendor.",
+			Retryable:      false,
+			Category:       CategoryInvalidInput,
+			cause:          err,
+		}
+	case errors.Is(err, cisco.ErrCommandRejected):
+		return &Error{
+			Message:        err.Error(),
+			Recommendation: "The device rejected the command in its response text (e.g. insufficient privilege level for \"show running-config\"). Check the credentials' privilege level on this device.",
 			Retryable:      false,
 			Category:       CategoryAuth,
 			cause:          err,

@@ -134,7 +134,8 @@ infrastructure-mcp/
 │   ├── grafana/
 │   ├── proxmox/
 │   ├── prometheus/, loki/            # planned
-│   ├── cisco/, mikrotik/, unifi/      # planned
+│   ├── cisco/
+│   ├── mikrotik/, unifi/              # planned
 │   └── homeassistant/                  # planned
 ├── mcp/
 │   ├── tools/               # one file per MCP tool
@@ -195,6 +196,13 @@ Tools implemented and tested against the real MCP protocol so far:
 - `proxmox_start_vm` — start a VM/container (state-changing; requires `confirm: true`)
 - `proxmox_stop_vm` — force-stop a VM/container (destructive; requires `confirm: true`)
 - `proxmox_snapshot` — take a VM/container snapshot (state-changing; requires `confirm: true`)
+
+**Networking — Cisco (v0.7, partial: MikroTik/UniFi remain on the Roadmap)**
+- `cisco_backup` — fetch the running configuration, as-is
+- `cisco_version` — software version, hostname, and uptime
+- `cisco_interfaces` — interface list with IP address, admin/link status, and line protocol
+- `cisco_inventory` — hardware components (chassis, modules, PSUs) with PID/VID/serial number
+- `cisco_logs` — buffered syslog messages, optionally capped to the most recent N lines
 
 **Cross-cutting, since v0.1**
 - Legacy network device support: Telnet transport, SSH legacy-crypto negotiation, transparent per-target protocol dispatch
@@ -528,9 +536,8 @@ Commit messages therefore need to follow Conventional Commits (`feat:`, `fix:`, 
 
 Implemented versions are listed under [Current Features](#current-features) and tracked feature-by-feature in [`PROGRESS.md`](PROGRESS.md). Everything below is **not started**.
 
-### v0.7 — Networking
+### v0.7 — Networking (in progress: Cisco shipped, MikroTik/UniFi remain)
 
-Cisco: `backup`, `show version`, `interfaces`, `inventory`, `logs`
 MikroTik: `backup`, `interfaces`, `routes`, `firewall`, `system resources`
 UniFi: `devices`, `clients`, `AP status`, `firmware`, `statistics`
 

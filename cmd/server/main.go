@@ -21,6 +21,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"infrastructure-mcp/internal/cisco"
 	"infrastructure-mcp/internal/docker"
 	"infrastructure-mcp/internal/grafana"
 	"infrastructure-mcp/internal/inventory"
@@ -91,6 +92,7 @@ func run() error {
 	kubeClient := kubernetes.New(inv)
 	grafanaClient := grafana.New(inv, nil)
 	proxmoxClient := proxmox.New(inv, nil)
+	ciscoClient := cisco.New(remotePool, inv)
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "infrastructure-mcp",
@@ -128,6 +130,11 @@ func run() error {
 	tools.RegisterProxmoxStartVM(server, logger, proxmoxClient)
 	tools.RegisterProxmoxStopVM(server, logger, proxmoxClient)
 	tools.RegisterProxmoxSnapshot(server, logger, proxmoxClient)
+	tools.RegisterCiscoBackup(server, logger, ciscoClient)
+	tools.RegisterCiscoVersion(server, logger, ciscoClient)
+	tools.RegisterCiscoInterfaces(server, logger, ciscoClient)
+	tools.RegisterCiscoInventory(server, logger, ciscoClient)
+	tools.RegisterCiscoLogs(server, logger, ciscoClient)
 
 	switch *transportKind {
 	case "stdio":
