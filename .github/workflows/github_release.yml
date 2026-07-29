@@ -94,8 +94,8 @@ jobs:
           fi
 
       # Scoped to just this release, for the GitHub release body only —
-      # deliberately separate from CHANGELOG.md, which is pushed to main
-      # directly below (see the App-token bypass step).
+      # deliberately separate from CHANGELOG.md, which is written to main
+      # directly below (see the App-token Contents API step).
       - name: Generate release notes
         if: steps.next_version.outputs.has_release == 'true'
         run: cog changelog --at ${{ steps.next_version.outputs.version }} > release-notes.md
@@ -105,12 +105,18 @@ jobs:
         run: cog changelog > CHANGELOG.md
 
       # GitHub Actions is not permitted to open PRs on this org, so PR-based
-      # changelog updates aren't an option. We push straight to main instead.
-      # The "update", "required_signatures" and "pull_request" rules on the
-      # main-rules ruleset block a plain push outright — the only way past
-      # them is a listed bypass_actor. This requires the release App's
-      # installation to be added to main-rules as an "Integration" bypass
-      # actor (an Admin *user* role bypass does NOT cover an App token).
+      # changelog updates aren't an option. We write CHANGELOG.md straight to
+      # main instead, through the Contents API rather than a plain `git push`.
+      # main-rules' bypass_actors (the release App, listed as an Integration
+      # bypass actor with bypass_mode "always") cover the protected-ref, PR,
+      # and status-check rules just fine -- but required_signatures rejects
+      # any commit that isn't signed, and a runner's local `git commit` never
+      # is, no matter how the bypass is configured (confirmed empirically:
+      # varying bypass_mode, credential handling, and App permissions all
+      # produced the identical GH013 signature violation). Commits made via
+      # the Contents API using this App's installation token come back signed
+      # and "Verified" by GitHub, which satisfies the rule outright (verified
+      # in isolation before this landed: verification.reason == "valid").
       - name: Generate GitHub App token
         if: steps.next_version.outputs.has_release == 'true'
         id: app_token
@@ -120,24 +126,22 @@ jobs:
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
 
-      - name: Commit and push CHANGELOG.md to main
+      - name: Commit CHANGELOG.md to main via Contents API
         if: steps.next_version.outputs.has_release == 'true'
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
-          APP_SLUG: ${{ steps.app_token.outputs.app-slug }}
         run: |
-          git config user.name "${APP_SLUG}[bot]"
-          git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          if git diff --cached --quiet; then
+          if git diff --quiet -- CHANGELOG.md; then
             echo "No changelog changes to commit."
-          else
-            git commit -m "docs(changelog): update for ${{ steps.next_version.outputs.version }} [skip ci]"
-            git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-            git fetch origin main
-            git rebase origin/main
-            git push origin HEAD:main
+            exit 0
           fi
+          sha=$(gh api "repos/${GITHUB_REPOSITORY}/contents/CHANGELOG.md?ref=main" --jq .sha)
+          content_b64=$(base64 -w0 CHANGELOG.md)
+          gh api -X PUT "repos/${GITHUB_REPOSITORY}/contents/CHANGELOG.md" \
+            -f message="docs(changelog): update for ${{ steps.next_version.outputs.version }} [skip ci]" \
+            -f content="$content_b64" \
+            -f sha="$sha" \
+            -f branch=main >/dev/null
 
       - name: Check if GitHub release exists
         if: steps.next_version.outputs.has_release == 'true'
