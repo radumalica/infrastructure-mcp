@@ -131,6 +131,11 @@ jobs:
             echo "No changelog changes to commit."
           else
             git commit -m "docs(changelog): update for ${{ steps.next_version.outputs.version }} [skip ci]"
+            # actions/checkout persists GITHUB_TOKEN as an http.extraheader, which
+            # git sends on top of (and instead of) any userinfo in the remote URL.
+            # Without clearing it, this push authenticates as the write-only
+            # GITHUB_TOKEN, not the App, and the ruleset bypass never applies.
+            git config --local --unset-all http.https://github.com/.extraheader || true
             git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
             git fetch origin main
             git rebase origin/main
