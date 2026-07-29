@@ -1,0 +1,28 @@
+name: Test app bypass (temporary)
+on: workflow_dispatch
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: app_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 #v3.2.0
+        with:
+          client-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Attempt Contents API write to main with App token
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          sha=$(gh api "repos/${GITHUB_REPOSITORY}/contents/CHANGELOG.md?ref=main" --jq .sha)
+          content=$(gh api "repos/${GITHUB_REPOSITORY}/contents/CHANGELOG.md?ref=main" --jq .content)
+          gh api -X PUT "repos/${GITHUB_REPOSITORY}/contents/CHANGELOG.md" \
+            -f message="test: app token contents api bypass check [skip ci]" \
+            -f content="$content" \
+            -f sha="$sha" \
+            -f branch=main
