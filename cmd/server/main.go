@@ -26,6 +26,7 @@ import (
 	"infrastructure-mcp/internal/inventory"
 	"infrastructure-mcp/internal/kubernetes"
 	"infrastructure-mcp/internal/linux"
+	"infrastructure-mcp/internal/proxmox"
 	"infrastructure-mcp/internal/remote"
 	"infrastructure-mcp/internal/ssh"
 	"infrastructure-mcp/internal/telnet"
@@ -69,6 +70,7 @@ func run() error {
 		"switches", len(inv.Switches),
 		"kubernetes", len(inv.Kubernetes),
 		"grafana", len(inv.Grafana),
+		"proxmox", len(inv.Proxmox),
 	)
 
 	var poolOpts []ssh.PoolOption
@@ -88,6 +90,7 @@ func run() error {
 	dockerClient := docker.New(remotePool)
 	kubeClient := kubernetes.New(inv)
 	grafanaClient := grafana.New(inv, nil)
+	proxmoxClient := proxmox.New(inv, nil)
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "infrastructure-mcp",
@@ -119,6 +122,12 @@ func run() error {
 	tools.RegisterGrafanaDashboards(server, logger, grafanaClient)
 	tools.RegisterGrafanaAnnotations(server, logger, grafanaClient)
 	tools.RegisterGrafanaQuery(server, logger, grafanaClient)
+	tools.RegisterProxmoxNodes(server, logger, proxmoxClient)
+	tools.RegisterProxmoxVMs(server, logger, proxmoxClient)
+	tools.RegisterProxmoxTasks(server, logger, proxmoxClient)
+	tools.RegisterProxmoxStartVM(server, logger, proxmoxClient)
+	tools.RegisterProxmoxStopVM(server, logger, proxmoxClient)
+	tools.RegisterProxmoxSnapshot(server, logger, proxmoxClient)
 
 	switch *transportKind {
 	case "stdio":

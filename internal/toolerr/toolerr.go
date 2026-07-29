@@ -11,6 +11,7 @@ import (
 
 	"infrastructure-mcp/internal/grafana"
 	"infrastructure-mcp/internal/inventory"
+	"infrastructure-mcp/internal/proxmox"
 	"infrastructure-mcp/internal/ssh"
 )
 
@@ -99,6 +100,30 @@ func Wrap(err error) error {
 		return &Error{
 			Message:        err.Error(),
 			Recommendation: "Check the token/user/password for this Grafana instance in the inventory.",
+			Retryable:      false,
+			Category:       CategoryAuth,
+			cause:          err,
+		}
+	case errors.Is(err, proxmox.ErrUnauthorized):
+		return &Error{
+			Message:        err.Error(),
+			Recommendation: "Check the API token for this Proxmox instance in the inventory.",
+			Retryable:      false,
+			Category:       CategoryAuth,
+			cause:          err,
+		}
+	case errors.Is(err, proxmox.ErrInvalidGuestType):
+		return &Error{
+			Message:        err.Error(),
+			Recommendation: "Set type to \"qemu\" or \"lxc\" and try again.",
+			Retryable:      false,
+			Category:       CategoryInvalidInput,
+			cause:          err,
+		}
+	case errors.Is(err, proxmox.ErrNoToken):
+		return &Error{
+			Message:        err.Error(),
+			Recommendation: "Set a token for this Proxmox instance in the inventory.",
 			Retryable:      false,
 			Category:       CategoryAuth,
 			cause:          err,
