@@ -12,15 +12,16 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-22.04
-    # cocogitto's bump commit is tagged with [skip ci]; ignore it so we
-    # don't re-trigger on ourselves.
+    # Skip workflow re-entry on changelog automation commits.
     if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
     env:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       contents: write
+      pull-requests: write
     outputs:
-      version: ${{ steps.release.outputs.version }}
+      version: ${{ steps.next_version.outputs.version }}
+      has_release: ${{ steps.next_version.outputs.has_release }}
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v6
@@ -35,50 +36,100 @@ jobs:
           args: --from-latest-tag
 
       - name: Get Next Version
-        id: var
+        id: next_version
         run: |
-          echo next_version=`cog bump --auto --dry-run` >> "$GITHUB_OUTPUT"
+          set +e
+          next_version=$(cog bump --auto --dry-run 2>&1)
+          bump_exit=$?
+          set -e
 
-      - name: Create a GitHub Release
-        uses: cocogitto/cocogitto-action@c7a74f5406bab86da17da0f0e460a69f8219a68c #v3.11
-        id: release
-        with:
-          check-latest-tag-only: true
-          release: true
-          git-user: 'GitHub Build'
-          git-user-email: 'github@users.noreply.github.com'
+          if [ "$bump_exit" -eq 0 ]; then
+            echo "has_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=$next_version" >> "$GITHUB_OUTPUT"
+          elif echo "$next_version" | grep -Eiq "nothing to bump|no commits|no conventional commit"; then
+            echo "No releasable commits found."
+            echo "has_release=false" >> "$GITHUB_OUTPUT"
+            echo "version=" >> "$GITHUB_OUTPUT"
+          else
+            echo "Unexpected cocogitto failure:"
+            echo "$next_version"
+            exit "$bump_exit"
+          fi
 
-      # `cog bump --auto` (above) only commits and tags the version bump
-      # locally; cocogitto never pushes on its own (that requires an
-      # explicit `post_bump_hooks` we don't have configured). Without this
-      # step the bump commit — and the CHANGELOG.md update it already made
-      # — is silently discarded when the runner exits, and the release
-      # body ends up citing a commit that was never pushed to origin.
-      # Two explicit pushes, not `git push --follow-tags`: cocogitto
-      # creates lightweight tags, which `--follow-tags` only pushes
-      # annotated ones.
-      - name: Push version bump commit and tag
+      - name: Create and push release tag
+        if: steps.next_version.outputs.has_release == 'true'
         run: |
-          git push origin HEAD:main
-          git push origin --tags
+          version='${{ steps.next_version.outputs.version }}'
+          if git ls-remote --tags origin | grep -q "refs/tags/$version$"; then
+            echo "Tag $version already exists on origin; skipping push."
+          else
+            git tag "$version"
+            if ! git push origin "$version"; then
+              echo "Failed to push tag $version to origin."
+              exit 1
+            fi
+          fi
+
+      - name: Verify remote tag exists
+        if: steps.next_version.outputs.has_release == 'true'
+        run: |
+          version='${{ steps.next_version.outputs.version }}'
+          if ! git ls-remote --tags origin | grep -q "refs/tags/$version$"; then
+            echo "Tag $version was not found on origin."
+            exit 1
+          fi
 
       # Scoped to just this release, for the GitHub release body only —
-      # deliberately separate from CHANGELOG.md, which `cog bump` already
-      # updated (full accumulated history) and which the push above just
-      # persisted. Writing `cog changelog --at ... > CHANGELOG.md` here
-      # would truncate that accumulated file down to only this version.
+      # deliberately separate from CHANGELOG.md, which is updated in a PR
+      # below so protected branch rules are respected.
       - name: Generate release notes
-        run: cog changelog --at ${{ steps.release.outputs.version }} > release-notes.md
+        if: steps.next_version.outputs.has_release == 'true'
+        run: cog changelog --at ${{ steps.next_version.outputs.version }} > release-notes.md
+
+      - name: Regenerate CHANGELOG.md
+        if: steps.next_version.outputs.has_release == 'true'
+        run: cog changelog > CHANGELOG.md
+
+      - name: Open PR with CHANGELOG.md update
+        if: steps.next_version.outputs.has_release == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: docs(changelog): update for ${{ steps.next_version.outputs.version }} [skip ci]
+          title: docs(changelog): update for ${{ steps.next_version.outputs.version }}
+          body: |
+            Automated changelog update for ${{ steps.next_version.outputs.version }}.
+
+            This PR is opened by the release workflow to comply with branch protection
+            rules that require changes to go through pull requests.
+          branch: automation/changelog-${{ steps.next_version.outputs.version }}
+          delete-branch: true
+          add-paths: CHANGELOG.md
+
+      - name: Check if GitHub release exists
+        if: steps.next_version.outputs.has_release == 'true'
+        id: existing_release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version='${{ steps.next_version.outputs.version }}'
+          if gh release view "$version" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Upload github release
+        if: steps.next_version.outputs.has_release == 'true' && steps.existing_release.outputs.exists == 'false'
         uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 #v2.3
         with:
           body_path: release-notes.md
-          tag_name: ${{ steps.release.outputs.version }}
+          tag_name: ${{ steps.next_version.outputs.version }}
 
   docker:
     name: docker
     needs: release
+    if: needs.release.outputs.has_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
