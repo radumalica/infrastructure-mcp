@@ -36,6 +36,16 @@ func (inv *Inventory) GrafanaEndpoint(name string) (ServiceEndpoint, error) {
 	return g, nil
 }
 
+// ProxmoxEndpoint returns the named Proxmox cluster, or ErrNotFound if it
+// does not exist.
+func (inv *Inventory) ProxmoxEndpoint(name string) (ServiceEndpoint, error) {
+	p, ok := inv.Proxmox[name]
+	if !ok {
+		return ServiceEndpoint{}, fmt.Errorf("%w: proxmox instance %q", ErrNotFound, name)
+	}
+	return p, nil
+}
+
 // ServerNames returns the names of all servers, optionally filtered to
 // those carrying the given tag. An empty tag returns every server name.
 // Results are sorted for deterministic tool output.

@@ -205,6 +205,27 @@ func TestGrafanaEndpoint_Lookup(t *testing.T) {
 	}
 }
 
+func TestProxmoxEndpoint_Lookup(t *testing.T) {
+	t.Setenv("TEST_GRAFANA_TOKEN", "secret-token")
+	inv, err := Parse([]byte(validYAML))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+
+	p, err := inv.ProxmoxEndpoint("lab")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.URL != "https://pve.lab.local:8006" {
+		t.Errorf("unexpected proxmox url: %s", p.URL)
+	}
+
+	_, err = inv.ProxmoxEndpoint("does-not-exist")
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
 func TestServerNames_FilterByTag(t *testing.T) {
 	t.Setenv("TEST_GRAFANA_TOKEN", "secret-token")
 	inv, err := Parse([]byte(validYAML))

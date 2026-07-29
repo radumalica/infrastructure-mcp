@@ -132,7 +132,7 @@ infrastructure-mcp/
 │   ├── toolerr/                  # structured error contract
 │   ├── kubernetes/
 │   ├── grafana/
-│   ├── proxmox/                    # planned
+│   ├── proxmox/
 │   ├── prometheus/, loki/            # planned
 │   ├── cisco/, mikrotik/, unifi/      # planned
 │   └── homeassistant/                  # planned
@@ -187,6 +187,14 @@ Tools implemented and tested against the real MCP protocol so far:
 - `grafana_dashboards` — search dashboards by title text and/or tag
 - `grafana_annotations` — annotations, optionally scoped to a time range and/or tags
 - `grafana_query` — raw query against one datasource (PromQL/LogQL/SQL/...); response is a datasource-specific passthrough, not normalized
+
+**Proxmox (v0.6)**
+- `proxmox_nodes` — list cluster nodes with status and resource usage
+- `proxmox_vms` — list QEMU VMs and LXC containers on a node
+- `proxmox_tasks` — recent tasks on a node, most recent first
+- `proxmox_start_vm` — start a VM/container (state-changing; requires `confirm: true`)
+- `proxmox_stop_vm` — force-stop a VM/container (destructive; requires `confirm: true`)
+- `proxmox_snapshot` — take a VM/container snapshot (state-changing; requires `confirm: true`)
 
 **Cross-cutting, since v0.1**
 - Legacy network device support: Telnet transport, SSH legacy-crypto negotiation, transparent per-target protocol dispatch
@@ -300,6 +308,9 @@ grafana:
     token: ${GRAFANA_TOKEN}
 
 proxmox:
+  # token is a Proxmox API token in "user@realm!tokenid=uuid" form
+  # (Datacenter > Permissions > API Tokens in the PVE UI). Ticket/cookie
+  # login is not supported.
   lab:
     url: https://pve.lab.local:8006
     token: ${PROXMOX_TOKEN}
@@ -515,14 +526,6 @@ Commit messages therefore need to follow Conventional Commits (`feat:`, `fix:`, 
 ## Roadmap
 
 Implemented versions are listed under [Current Features](#current-features) and tracked feature-by-feature in [`PROGRESS.md`](PROGRESS.md). Everything below is **not started**.
-
-### v0.6 — Proxmox
-- `proxmox_nodes`
-- `proxmox_vms`
-- `proxmox_tasks`
-- `proxmox_start_vm`
-- `proxmox_stop_vm`
-- `proxmox_snapshot`
 
 ### v0.7 — Networking
 

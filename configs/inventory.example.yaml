@@ -62,6 +62,9 @@ grafana:
     token: ${GRAFANA_TOKEN}
 
 proxmox:
+  # token is a Proxmox API token in "user@realm!tokenid=uuid" form
+  # (Datacenter > Permissions > API Tokens in the PVE UI). Ticket/cookie
+  # login is not supported.
   lab:
     url: https://pve.lab.local:8006
     token: ${PROXMOX_TOKEN}
