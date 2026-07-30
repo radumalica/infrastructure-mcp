@@ -19,14 +19,21 @@ type Server struct {
 // NetworkDevice describes a router or switch managed via a vendor-specific
 // adapter (Cisco, MikroTik, ...). Many such devices are old: some speak
 // SSH only with obsolete key exchange/cipher/MAC algorithms, some have no
-// SSH server at all and are reachable only via Telnet, and essentially
-// none support public-key auth — user/password is the norm.
+// SSH server at all and are reachable only via Telnet, and most don't
+// support public-key auth — user/password is the norm, though some (e.g.
+// a Cisco switch with an imported authorized key, or MikroTik's
+// user ssh-keys) do.
 type NetworkDevice struct {
 	Hostname string   `yaml:"hostname" validate:"required"`
 	Vendor   string   `yaml:"vendor" validate:"required"`
 	User     string   `yaml:"user"`
 	Password string   `yaml:"password"`
 	Tags     []string `yaml:"tags"`
+
+	// Key is a path to an SSH private key, for the minority of devices
+	// that do accept public-key auth. Only takes effect when Protocol is
+	// "ssh" (or empty); Telnet has no key-based auth.
+	Key string `yaml:"key"`
 
 	// Port overrides the default port for Protocol (22 for ssh, 23 for
 	// telnet).
