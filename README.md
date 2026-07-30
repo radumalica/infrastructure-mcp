@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.svg" alt="Infrastructure MCP" width="100%">
+</p>
+
 # Infrastructure MCP Server
 
 **Give Claude Code, Cursor, and other AI agents safe access to your real infrastructure — without giving them raw SSH access.**
