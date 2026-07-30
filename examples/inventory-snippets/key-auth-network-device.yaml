@@ -1,0 +1,23 @@
+# A router/switch authenticated with an SSH key instead of user/password —
+# same `key:` field servers use. Most network gear only supports
+# user/password, but some (a switch with an imported authorized key, a
+# MikroTik `/user ssh-keys` entry) accept public-key auth. See ADR 0008.
+#
+# key and password may both be set on one entry; buildAuthMethods offers
+# both as auth methods, useful for a device mid-migration between the two.
+
+switches:
+  core-sw:
+    hostname: 10.0.0.22
+    vendor: mikrotik
+    user: admin
+    key: ~/.ssh/id_rsa
+
+  # Key auth combined with legacy_crypto: true — both independent opt-in
+  # flags, freely combinable on the same device.
+  old-core-sw:
+    hostname: 10.0.0.23
+    vendor: cisco
+    user: netadmin
+    key: ~/.ssh/id_rsa
+    legacy_crypto: true

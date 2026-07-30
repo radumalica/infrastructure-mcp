@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "infrastructure": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://<host>:8080/mcp",
+        "--header",
+        "Authorization: Bearer ${MCP_HTTP_TOKEN}"
+      ]
+    }
+  }
+}

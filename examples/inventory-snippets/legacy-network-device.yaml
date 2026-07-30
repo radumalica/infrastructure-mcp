@@ -1,0 +1,27 @@
+# Two flavors of old network gear that run_command and the cisco_* tools
+# reach transparently, no tool-layer changes needed — see ADR 0004 and
+# ADR 0005 in docs/adr/.
+
+routers:
+  # No SSH server at all: reachable only via Telnet. Telnet devices are
+  # always user/password auth (no public keys, no host-key verification —
+  # the protocol has no equivalent of either).
+  legacy-edge:
+    hostname: 10.0.0.12
+    vendor: cisco
+    user: admin
+    password: ${LEGACY_EDGE_PASSWORD}
+    protocol: telnet
+
+switches:
+  # Has an SSH server, but one old enough to only offer obsolete key
+  # exchange/cipher/MAC/host-key algorithms. legacy_crypto opts this one
+  # device into golang.org/x/crypto/ssh's InsecureAlgorithms(), additively
+  # — every other target in the inventory keeps the modern, secure
+  # defaults untouched.
+  ancient-sw:
+    hostname: 10.0.0.21
+    vendor: cisco
+    user: admin
+    password: ${ANCIENT_SW_PASSWORD}
+    legacy_crypto: true

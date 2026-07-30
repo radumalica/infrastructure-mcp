@@ -16,6 +16,7 @@ A self-hosted [Model Context Protocol](https://modelcontextprotocol.io) server t
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Connecting an AI Agent](#connecting-an-ai-agent)
+- [Examples](#examples)
 - [Tool Design Philosophy](#tool-design-philosophy)
 - [Security](#security)
 - [Development](#development)
@@ -143,7 +144,13 @@ infrastructure-mcp/
 │   └── resources/
 ├── configs/                # example inventory
 ├── docs/
+│   ├── adr/                 # architecture decision records
+│   ├── TOOL_REFERENCE.md      # every tool's params + example output
+│   └── ADDING_AN_ADAPTER.md    # how to add a new integration
 ├── examples/
+│   ├── mcp-client-config/       # ready-to-adapt client JSON snippets
+│   ├── inventory-snippets/       # focused single-concept YAML fragments
+│   └── sample-tool-outputs/       # example JSON responses
 ├── scripts/
 └── tests/
 ```
@@ -404,6 +411,142 @@ Point any remote-MCP-capable client at `http://<host>:8080/mcp` with that header
 Put the HTTP endpoint behind TLS and network-level access control (a reverse proxy, VPN, or private network) before exposing it beyond localhost — the server itself does not add its own transport-layer authentication.
 
 Once connected, over either transport, the agent sees only the tools listed under [Current Features](#current-features) — never raw shell access, never credentials.
+
+---
+
+## Examples
+
+Full request/response walkthroughs for a few representative tools, run
+against the inventory shown in [Configuration](#configuration). Values are
+synthetic — copy the shape, not the data. Every tool's shape is documented
+in [`docs/TOOL_REFERENCE.md`](docs/TOOL_REFERENCE.md); runnable inventory
+fragments and MCP client configs live under [`examples/`](examples/).
+
+**Check disk space on a server:**
+
+```
+disk_usage(server: "archive")
+```
+```json
+{
+  "server": "archive",
+  "filesystems": [
+    {
+      "filesystem": "/dev/sda1",
+      "mount_point": "/",
+      "total_kb": 51475068,
+      "used_kb": 46853200,
+      "available_kb": 2003212,
+      "used_percent": 91,
+      "status": "critical",
+      "recommendation": "Free disk space or expand storage."
+    }
+  ],
+  "timestamp": "2026-07-30T09:00:00Z"
+}
+```
+
+**List containers on a Docker host:**
+
+```
+docker_ps(server: "archive")
+```
+```json
+{
+  "server": "archive",
+  "containers": [
+    {
+      "id": "a1b2c3d4e5f6",
+      "image": "grafana/grafana:11.2.0",
+      "status": "Up 3 weeks",
+      "state": "running",
+      "ports": "0.0.0.0:3000->3000/tcp",
+      "names": "grafana"
+    }
+  ],
+  "timestamp": "2026-07-30T09:00:00Z"
+}
+```
+
+**Restart a container — the confirm-gate pattern every mutating tool uses.** The first call, without `confirm`, is a no-op that reports what *would* happen:
+
+```
+docker_restart(server: "archive", container: "grafana")
+```
+```json
+{
+  "server": "archive",
+  "container": "grafana",
+  "status": "confirmation_required",
+  "message": "Set confirm: true to restart this container. No action was taken.",
+  "timestamp": "2026-07-30T09:00:00Z"
+}
+```
+
+Only the confirmed call actually restarts it:
+
+```
+docker_restart(server: "archive", container: "grafana", confirm: true)
+```
+```json
+{
+  "server": "archive",
+  "container": "grafana",
+  "status": "restarted",
+  "message": "Container restarted.",
+  "timestamp": "2026-07-30T09:00:05Z"
+}
+```
+
+**Interfaces on a Cisco switch reached over legacy-crypto SSH** (`legacy_crypto: true` in inventory — see [ADR 0005](docs/adr/0005-opt-in-legacy-ssh-crypto.md)):
+
+```
+cisco_interfaces(device: "old-core-sw")
+```
+```json
+{
+  "device": "old-core-sw",
+  "interfaces": [
+    { "interface": "Vlan100", "ip_address": "10.0.0.23", "ok": "YES", "method": "NVRAM", "status": "up", "protocol": "up" },
+    { "interface": "GigabitEthernet1/0/1", "ip_address": "unassigned", "ok": "YES", "method": "unset", "status": "up", "protocol": "up" }
+  ],
+  "timestamp": "2026-07-30T09:00:00Z"
+}
+```
+
+**A firing alert from Grafana:**
+
+```
+grafana_alerts(instance: "main")
+```
+```json
+{
+  "instance": "main",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": { "alertname": "HighDiskUsage", "instance": "archive", "severity": "critical" },
+      "starts_at": "2026-07-30T08:00:00Z",
+      "fingerprint": "9f2a1c7e0b3d4e5f"
+    }
+  ],
+  "timestamp": "2026-07-30T09:00:00Z"
+}
+```
+
+**A tool call against an unreachable target — the structured error envelope, never a raw Go error:**
+
+```
+uptime(server: "archive")
+```
+```json
+{
+  "message": "dial tcp 10.0.0.5:22: connect: connection refused",
+  "recommendation": "Retry the request; if it persists, check network connectivity to the target.",
+  "retryable": true,
+  "category": "network"
+}
+```
 
 ---
 

@@ -1,0 +1,28 @@
+# Every category is a map keyed by name, so a second instance of a
+# "feels singular" service (Grafana, Proxmox) is just another key, never
+# a schema change — see ADR 0002 in docs/adr/.
+
+grafana:
+  main:
+    url: https://grafana.lab.local
+    token: ${GRAFANA_TOKEN}
+
+  staging:
+    url: https://grafana-staging.lab.local
+    token: ${GRAFANA_STAGING_TOKEN}
+
+proxmox:
+  # token is a Proxmox API token in "user@realm!tokenid=uuid" form
+  # (Datacenter > Permissions > API Tokens in the PVE UI). Ticket/cookie
+  # login is not supported.
+  lab:
+    url: https://pve.lab.local:8006
+    token: ${PROXMOX_TOKEN}
+
+  colo:
+    url: https://pve-colo.example.com:8006
+    token: ${PROXMOX_COLO_TOKEN}
+
+# Tool calls disambiguate by instance name, e.g.:
+#   grafana_alerts(instance: "staging")
+#   proxmox_vms(instance: "colo", node: "pve-colo-01")

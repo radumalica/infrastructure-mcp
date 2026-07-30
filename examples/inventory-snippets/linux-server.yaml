@@ -1,0 +1,27 @@
+# A key-authenticated Linux server, and one reached only through a jump
+# host. Merge into your servers: block in configs/inventory.yaml.
+
+servers:
+  archive:
+    hostname: 10.0.0.5
+    user: hermes
+    key: ~/.ssh/archive
+    tags:
+      - linux
+      - ethereum
+
+  # proxyjump names another inventory server this one is only reachable
+  # through — useful for hosts on a private subnet behind a bastion.
+  pve01:
+    hostname: 10.0.0.2
+    user: hermes
+    proxyjump: jumpbox
+    tags:
+      - proxmox
+
+  jumpbox:
+    hostname: 203.0.113.10
+    user: hermes
+    key: ~/.ssh/jumpbox
+    tags:
+      - bastion
