@@ -1,3 +1,12 @@
+## v0.5.0 - 2026-07-30
+#### Features
+- add banner SVG for project branding in README - (cd6ee91) - tox
+#### Documentation
+- (**changelog**) update for v0.4.0 [skip ci] - (ff27a8f) - repo-gha[bot]
+- add ADRs, tool reference, adapter guide, and examples (#17) - (323aaef) - Radu
+
+- - -
+
 ## v0.4.0 - 2026-07-30
 #### Features
 - support SSH public-key auth for routers/switches (#16) - (c53f85b) - Radu
