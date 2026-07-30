@@ -35,8 +35,12 @@ func parseVersion(out string) VersionInfo {
 
 // interfaceLinePattern matches one data row of "show ip interface brief":
 // Interface, IP-Address, OK?, Method, Status (one or two words, e.g.
-// "administratively down"), Protocol.
-var interfaceLinePattern = regexp.MustCompile(`^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+?)\s+(\S+)$`)
+// "administratively down"), Protocol. The interface column is required to
+// contain a digit (every real Cisco interface name does: Vlan1,
+// GigabitEthernet1/0/12, Port-channel1, ...) so that six-token banner
+// lines preceding the table on Telnet sessions ("Load for five secs: ...",
+// "Time source is NTP, ...") aren't mistaken for data rows.
+var interfaceLinePattern = regexp.MustCompile(`^(\S*\d\S*)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+?)\s+(\S+)$`)
 
 // parseInterfaces parses "show ip interface brief" into one entry per
 // interface, skipping the header row.

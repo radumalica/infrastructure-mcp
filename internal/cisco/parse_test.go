@@ -50,6 +50,28 @@ func TestParseInterfaces(t *testing.T) {
 	}
 }
 
+// sampleShowIPIntBriefTelnetBanner reproduces the "Load for five secs" /
+// "Time source is NTP" banner that some Telnet sessions echo immediately
+// before the "show ip interface brief" table — these are six
+// whitespace-separated tokens too, and were previously mistaken for data
+// rows.
+const sampleShowIPIntBriefTelnetBanner = `Load for five secs: 16%/0%; one minute: 16%; five minutes: 16%
+Time source is NTP, 13:49:57.544 EEST Thu Jul 30 2026
+
+Interface                  IP-Address      OK? Method Status                Protocol
+Vlan100                     172.16.1.5      YES NVRAM  up                    up
+`
+
+func TestParseInterfaces_SkipsTelnetBanner(t *testing.T) {
+	entries := parseInterfaces(sampleShowIPIntBriefTelnetBanner)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry (banner lines skipped), got %d: %+v", len(entries), entries)
+	}
+	if entries[0].Interface != "Vlan100" {
+		t.Errorf("unexpected entry[0]: %+v", entries[0])
+	}
+}
+
 const sampleShowInventory = `NAME: "1", DESCR: "2911 chassis"
 PID: CISCO2911/K9        , VID: V05  , SN: FTX1512Q1EF
 
