@@ -1,0 +1,25 @@
+{
+  "server": "archive",
+  "filesystems": [
+    {
+      "filesystem": "/dev/sda1",
+      "mount_point": "/",
+      "total_kb": 51475068,
+      "used_kb": 46853200,
+      "available_kb": 2003212,
+      "used_percent": 91,
+      "status": "critical",
+      "recommendation": "Free disk space or expand storage."
+    },
+    {
+      "filesystem": "/dev/sdb1",
+      "mount_point": "/data",
+      "total_kb": 966367264,
+      "used_kb": 512000000,
+      "available_kb": 405000000,
+      "used_percent": 53,
+      "status": "ok"
+    }
+  ],
+  "timestamp": "2026-07-30T09:00:00Z"
+}

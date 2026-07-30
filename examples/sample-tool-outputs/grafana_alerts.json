@@ -1,0 +1,20 @@
+{
+  "instance": "main",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": { "alertname": "HighDiskUsage", "instance": "archive", "severity": "critical" },
+      "annotations": { "summary": "Disk usage above 90% on archive:/", "runbook_url": "https://runbooks.lab.local/disk-usage" },
+      "starts_at": "2026-07-30T08:00:00Z",
+      "fingerprint": "9f2a1c7e0b3d4e5f"
+    },
+    {
+      "status": "resolved",
+      "labels": { "alertname": "ContainerRestartLoop", "instance": "archive", "container": "prometheus" },
+      "starts_at": "2026-07-30T07:40:00Z",
+      "ends_at": "2026-07-30T07:55:00Z",
+      "fingerprint": "1a2b3c4d5e6f7089"
+    }
+  ],
+  "timestamp": "2026-07-30T09:00:00Z"
+}

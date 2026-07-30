@@ -1,8 +1,140 @@
 # Infrastructure MCP Server
 
-A self-hosted [Model Context Protocol](https://modelcontextprotocol.io) server that lets AI agents (Claude, Cursor, Hermes, OpenAI Agents, ...) safely operate real infrastructure — Linux servers, Docker, Kubernetes, Proxmox, Grafana, network gear, and more — through high-level, auditable tools instead of raw shell access.
+**Give Claude Code, Cursor, and other AI agents safe access to your real infrastructure — without giving them raw SSH access.**
+
+A self-hosted [Model Context Protocol](https://modelcontextprotocol.io) server that exposes high-level, auditable tools (`disk_usage()`, `docker_restart()`, `grafana_alerts()`, ...) instead of `execute(command)`. Every call is inventory-driven, structured, and logged — the agent reasons about infrastructure; this server is the only thing that actually touches it.
 
 > **Status:** early, actively developed. See [Roadmap](#roadmap) for what's implemented and what's coming.
+
+**Manage:** ✓ Linux &nbsp; ✓ Docker &nbsp; ✓ Kubernetes &nbsp; ✓ Proxmox &nbsp; ✓ Grafana &nbsp; ✓ Cisco
+*(MikroTik, UniFi, Prometheus/Loki, Home Assistant, and more are on the [Roadmap](#roadmap) — not shipped yet.)*
+
+**Works with:** ✓ Claude Code &nbsp; ✓ Cursor &nbsp; ✓ OpenAI Codex &nbsp; ✓ Gemini CLI &nbsp; ✓ Windsurf &nbsp; ✓ Hermes
+*(MCP is an open, client-agnostic protocol — any spec-compliant client works; these are just the ones people actually use it with.)*
+
+| | Raw SSH access | Infrastructure MCP |
+|---|---|---|
+| Audit trail | ❌ | ✅ structured log per call (`tool`, `user`, `target`, `duration`, `result`) |
+| Input validation | ❌ | ✅ every parameter validated, no shell interpolation |
+| Structured output | ❌ free text | ✅ JSON, every response |
+| Inventory-aware | ❌ agent picks the host | ✅ targets resolved by name/tag only |
+| Blast-radius control | ❌ | ✅ read-only by default, mutations require `confirm: true` |
+| Credential exposure | ❌ agent sees them | ✅ credentials never leave the adapter layer |
+
+---
+
+## Quick Start
+
+```bash
+git clone https://github.com/<your-org>/infrastructure-mcp.git
+cd infrastructure-mcp
+go build -o bin/infrastructure-mcp ./cmd/server
+
+cp configs/inventory.example.yaml configs/inventory.yaml   # fill in your own targets
+```
+
+Point your MCP client at the binary — see [Connecting an AI Agent](#connecting-an-ai-agent) for Docker and remote-HTTP setups too:
+
+```json
+{
+  "mcpServers": {
+    "infrastructure": {
+      "command": "/path/to/bin/infrastructure-mcp",
+      "args": ["-inventory", "/path/to/configs/inventory.yaml"]
+    }
+  }
+}
+```
+
+---
+
+## Example Conversation
+
+```
+You: My archive server feels slow, and I'm seeing errors in Grafana. Can you find out why?
+
+Claude, using Infrastructure MCP:
+
+  1. cpu_usage(server: "archive")                          → 92% used, status: "warning"
+  2. docker_ps(server: "archive")                           → prometheus: "Restarting (1) 4 seconds ago"
+  3. docker_logs(server: "archive", container: "prometheus") → "panic: too many open files"
+  4. grafana_alerts(instance: "main")                        → firing: HighDiskUsage on archive:/
+
+Claude: Root cause found — archive is at 91% disk usage, which is causing Prometheus
+to crash-loop on startup ("too many open files" from a corrupted WAL it can't
+compact into the remaining space). Free up space on `/` (or expand it), then run:
+
+  docker_restart(server: "archive", container: "prometheus", confirm: true)
+```
+
+Four tool calls, one root cause, zero raw shell access. Every call above is inventory-driven, logged, and returns structured JSON — see [Examples](#examples) for the actual response shapes.
+
+---
+
+## Current Features
+
+Tools implemented and tested against the real MCP protocol so far:
+
+**Core (v0.1)**
+- `list_servers` — list inventory targets, optionally filtered by tag
+- `run_command` — run an arbitrary command against an inventory target
+- `uptime` — uptime and load averages
+- `disk_usage` — per-filesystem usage with warning/critical severity
+- `memory_usage` — memory utilization with warning/critical severity
+
+**Linux (v0.2)**
+- `failed_services` — systemd units in the failed state
+- `cpu_usage` — aggregate CPU utilization (Proxmox/KVM guest-time aware)
+- `reboot_required` — pending-reboot detection (marker file + kernel comparison)
+- `running_processes` — top processes by CPU usage
+- `journal_errors` — recent systemd journal entries at error priority+
+- `kernel_version` — running kernel release
+
+**Docker (v0.3)**
+- `docker_ps` — list containers (running or all)
+- `docker_images` — list local images
+- `docker_stats` — point-in-time resource usage snapshot
+- `docker_logs` — recent combined stdout/stderr log lines
+- `docker_restart` — restart a container (destructive; requires `confirm: true`)
+
+**Kubernetes (v0.4)**
+- `kubectl_get_pods` — list pods, optionally scoped to a namespace
+- `kubectl_logs` — fetch a pod/container's log lines
+- `kubectl_events` — recent cluster events, most recent first
+- `kubectl_describe` — structured pod summary (spec/status highlights + recent events)
+- `kubectl_nodes` — node list with readiness, roles, and capacity
+
+**Grafana (v0.5)**
+- `grafana_alerts` — currently firing/resolved alert instances from the alerting API
+- `grafana_dashboards` — search dashboards by title text and/or tag
+- `grafana_annotations` — annotations, optionally scoped to a time range and/or tags
+- `grafana_query` — raw query against one datasource (PromQL/LogQL/SQL/...); response is a datasource-specific passthrough, not normalized
+
+**Proxmox (v0.6)**
+- `proxmox_nodes` — list cluster nodes with status and resource usage
+- `proxmox_vms` — list QEMU VMs and LXC containers on a node
+- `proxmox_tasks` — recent tasks on a node, most recent first
+- `proxmox_start_vm` — start a VM/container (state-changing; requires `confirm: true`)
+- `proxmox_stop_vm` — force-stop a VM/container (destructive; requires `confirm: true`)
+- `proxmox_snapshot` — take a VM/container snapshot (state-changing; requires `confirm: true`)
+
+**Networking — Cisco (v0.7, partial: MikroTik/UniFi remain on the Roadmap)**
+- `cisco_backup` — fetch the running configuration, as-is
+- `cisco_version` — software version, hostname, and uptime
+- `cisco_interfaces` — interface list with IP address, admin/link status, and line protocol
+- `cisco_inventory` — hardware components (chassis, modules, PSUs) with PID/VID/serial number
+- `cisco_logs` — buffered syslog messages, optionally capped to the most recent N lines
+
+**Cross-cutting, since v0.1**
+- Legacy network device support: Telnet transport, SSH legacy-crypto negotiation, transparent per-target protocol dispatch, SSH public-key auth for routers/switches
+- Structured error contract on every tool (`message`, `recommendation`, `retryable`, `category`)
+- Structured per-execution logging (`tool`, `user`, `target`, `duration`, `result`, `error`)
+- Host-key verification fail-closed by default, with explicit opt-outs for lab use
+- Dual MCP transport: stdio (local subprocess clients) and Streamable HTTP (remote clients), from the same binary — HTTP is fail-closed by default, requiring a bearer token (`MCP_HTTP_TOKEN`) unless explicitly opted out for lab use
+- Docker image (multi-arch, GHCR) + Docker Compose, with a self-check `-healthcheck` mode for shell-less containers
+- CI/CD: PR-gated build/vet/lint/race-tested-CI, automatic semantic versioning + changelog + image publish + Trivy scan on merge to `main` — see [CI/CD](#cicd)
+
+See [Roadmap](#roadmap) for what's next.
 
 ---
 
@@ -12,10 +144,10 @@ A self-hosted [Model Context Protocol](https://modelcontextprotocol.io) server t
 - [Goals](#goals)
 - [Non-Goals](#non-goals)
 - [Architecture](#architecture)
-- [Current Features](#current-features)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Connecting an AI Agent](#connecting-an-ai-agent)
+- [Examples](#examples)
 - [Tool Design Philosophy](#tool-design-philosophy)
 - [Security](#security)
 - [Development](#development)
@@ -102,6 +234,8 @@ Three layers, wired top-down:
 
 **Everything is inventory-driven.** No IP addresses, hostnames, or credentials appear in tool implementations — targets are resolved by name/tag from the inventory YAML.
 
+Architectural decisions and the reasoning behind them are recorded as ADRs — see [`docs/adr/`](docs/adr/).
+
 ### Technology Stack
 
 | Concern | Choice |
@@ -143,77 +277,16 @@ infrastructure-mcp/
 │   └── resources/
 ├── configs/                # example inventory
 ├── docs/
+│   ├── adr/                 # architecture decision records
+│   ├── TOOL_REFERENCE.md      # every tool's params + example output
+│   └── ADDING_AN_ADAPTER.md    # how to add a new integration
 ├── examples/
+│   ├── mcp-client-config/       # ready-to-adapt client JSON snippets
+│   ├── inventory-snippets/       # focused single-concept YAML fragments
+│   └── sample-tool-outputs/       # example JSON responses
 ├── scripts/
 └── tests/
 ```
-
----
-
-## Current Features
-
-Tools implemented and tested against the real MCP protocol so far:
-
-**Core (v0.1)**
-- `list_servers` — list inventory targets, optionally filtered by tag
-- `run_command` — run an arbitrary command against an inventory target
-- `uptime` — uptime and load averages
-- `disk_usage` — per-filesystem usage with warning/critical severity
-- `memory_usage` — memory utilization with warning/critical severity
-
-**Linux (v0.2)**
-- `failed_services` — systemd units in the failed state
-- `cpu_usage` — aggregate CPU utilization (Proxmox/KVM guest-time aware)
-- `reboot_required` — pending-reboot detection (marker file + kernel comparison)
-- `running_processes` — top processes by CPU usage
-- `journal_errors` — recent systemd journal entries at error priority+
-- `kernel_version` — running kernel release
-
-**Docker (v0.3)**
-- `docker_ps` — list containers (running or all)
-- `docker_images` — list local images
-- `docker_stats` — point-in-time resource usage snapshot
-- `docker_logs` — recent combined stdout/stderr log lines
-- `docker_restart` — restart a container (destructive; requires `confirm: true`)
-
-**Kubernetes (v0.4)**
-- `kubectl_get_pods` — list pods, optionally scoped to a namespace
-- `kubectl_logs` — fetch a pod/container's log lines
-- `kubectl_events` — recent cluster events, most recent first
-- `kubectl_describe` — structured pod summary (spec/status highlights + recent events)
-- `kubectl_nodes` — node list with readiness, roles, and capacity
-
-**Grafana (v0.5)**
-- `grafana_alerts` — currently firing/resolved alert instances from the alerting API
-- `grafana_dashboards` — search dashboards by title text and/or tag
-- `grafana_annotations` — annotations, optionally scoped to a time range and/or tags
-- `grafana_query` — raw query against one datasource (PromQL/LogQL/SQL/...); response is a datasource-specific passthrough, not normalized
-
-**Proxmox (v0.6)**
-- `proxmox_nodes` — list cluster nodes with status and resource usage
-- `proxmox_vms` — list QEMU VMs and LXC containers on a node
-- `proxmox_tasks` — recent tasks on a node, most recent first
-- `proxmox_start_vm` — start a VM/container (state-changing; requires `confirm: true`)
-- `proxmox_stop_vm` — force-stop a VM/container (destructive; requires `confirm: true`)
-- `proxmox_snapshot` — take a VM/container snapshot (state-changing; requires `confirm: true`)
-
-**Networking — Cisco (v0.7, partial: MikroTik/UniFi remain on the Roadmap)**
-- `cisco_backup` — fetch the running configuration, as-is
-- `cisco_version` — software version, hostname, and uptime
-- `cisco_interfaces` — interface list with IP address, admin/link status, and line protocol
-- `cisco_inventory` — hardware components (chassis, modules, PSUs) with PID/VID/serial number
-- `cisco_logs` — buffered syslog messages, optionally capped to the most recent N lines
-
-**Cross-cutting, since v0.1**
-- Legacy network device support: Telnet transport, SSH legacy-crypto negotiation, transparent per-target protocol dispatch
-- Structured error contract on every tool (`message`, `recommendation`, `retryable`, `category`)
-- Structured per-execution logging (`tool`, `user`, `target`, `duration`, `result`, `error`)
-- Host-key verification fail-closed by default, with explicit opt-outs for lab use
-- Dual MCP transport: stdio (local subprocess clients) and Streamable HTTP (remote clients), from the same binary — HTTP is fail-closed by default, requiring a bearer token (`MCP_HTTP_TOKEN`) unless explicitly opted out for lab use
-- Docker image (multi-arch, GHCR) + Docker Compose, with a self-check `-healthcheck` mode for shell-less containers
-- CI/CD: PR-gated build/vet/lint/race-tested-CI, automatic semantic versioning + changelog + image publish + Trivy scan on merge to `main` — see [CI/CD](#cicd)
-
-See [Roadmap](#roadmap) for what's next.
 
 ---
 
@@ -333,6 +406,8 @@ kubernetes:
 
 **Secrets are never written in plaintext.** Any `${VAR}` in the YAML is resolved from the process environment at load time, and load fails closed if the variable is unset — real credentials are never committed to the repo.
 
+More focused, single-concept inventory fragments (key-authenticated network devices, multi-instance services, ...) live under [`examples/inventory-snippets/`](examples/inventory-snippets/).
+
 ### Server flags
 
 ```bash
@@ -404,6 +479,144 @@ Point any remote-MCP-capable client at `http://<host>:8080/mcp` with that header
 Put the HTTP endpoint behind TLS and network-level access control (a reverse proxy, VPN, or private network) before exposing it beyond localhost — the server itself does not add its own transport-layer authentication.
 
 Once connected, over either transport, the agent sees only the tools listed under [Current Features](#current-features) — never raw shell access, never credentials.
+
+Ready-to-adapt client config files (stdio and remote-HTTP-via-`mcp-remote`) live under [`examples/mcp-client-config/`](examples/mcp-client-config/).
+
+---
+
+## Examples
+
+Full request/response walkthroughs for a few representative tools, run
+against the inventory shown in [Configuration](#configuration). Values are
+synthetic — copy the shape, not the data. Every tool's shape is documented
+in [`docs/TOOL_REFERENCE.md`](docs/TOOL_REFERENCE.md); runnable inventory
+fragments and MCP client configs live under [`examples/`](examples/).
+
+**Check disk space on a server:**
+
+```
+disk_usage(server: "archive")
+```
+```json
+{
+  "server": "archive",
+  "filesystems": [
+    {
+      "filesystem": "/dev/sda1",
+      "mount_point": "/",
+      "total_kb": 51475068,
+      "used_kb": 46853200,
+      "available_kb": 2003212,
+      "used_percent": 91,
+      "status": "critical",
+      "recommendation": "Free disk space immediately or expand capacity."
+    }
+  ],
+  "timestamp": "2026-07-30T09:00:00Z"
+}
+```
+
+**List containers on a Docker host:**
+
+```
+docker_ps(server: "archive")
+```
+```json
+{
+  "server": "archive",
+  "containers": [
+    {
+      "id": "a1b2c3d4e5f6",
+      "image": "grafana/grafana:11.2.0",
+      "status": "Up 3 weeks",
+      "state": "running",
+      "ports": "0.0.0.0:3000->3000/tcp",
+      "names": "grafana"
+    }
+  ],
+  "timestamp": "2026-07-30T09:00:00Z"
+}
+```
+
+**Restart a container — the confirm-gate pattern every mutating tool uses.** The first call, without `confirm`, is a no-op that reports what *would* happen:
+
+```
+docker_restart(server: "archive", container: "grafana")
+```
+```json
+{
+  "server": "archive",
+  "container": "grafana",
+  "status": "confirmation_required",
+  "message": "Set confirm: true to restart this container. No action was taken.",
+  "timestamp": "2026-07-30T09:00:00Z"
+}
+```
+
+Only the confirmed call actually restarts it:
+
+```
+docker_restart(server: "archive", container: "grafana", confirm: true)
+```
+```json
+{
+  "server": "archive",
+  "container": "grafana",
+  "status": "restarted",
+  "message": "Container restarted.",
+  "timestamp": "2026-07-30T09:00:05Z"
+}
+```
+
+**Interfaces on a Cisco switch reached over legacy-crypto SSH** (`legacy_crypto: true` in inventory — see [ADR 0005](docs/adr/0005-opt-in-legacy-ssh-crypto.md)):
+
+```
+cisco_interfaces(device: "old-core-sw")
+```
+```json
+{
+  "device": "old-core-sw",
+  "interfaces": [
+    { "interface": "Vlan100", "ip_address": "10.0.0.23", "ok": "YES", "method": "NVRAM", "status": "up", "protocol": "up" },
+    { "interface": "GigabitEthernet1/0/1", "ip_address": "unassigned", "ok": "YES", "method": "unset", "status": "up", "protocol": "up" }
+  ],
+  "timestamp": "2026-07-30T09:00:00Z"
+}
+```
+
+**A firing alert from Grafana:**
+
+```
+grafana_alerts(instance: "main")
+```
+```json
+{
+  "instance": "main",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": { "alertname": "HighDiskUsage", "instance": "archive", "severity": "critical" },
+      "starts_at": "2026-07-30T08:00:00Z",
+      "fingerprint": "9f2a1c7e0b3d4e5f"
+    }
+  ],
+  "timestamp": "2026-07-30T09:00:00Z"
+}
+```
+
+**A tool call against an unreachable target — the structured error envelope, never a raw Go error:**
+
+```
+uptime(server: "archive")
+```
+```json
+{
+  "message": "dial tcp 10.0.0.5:22: connect: connection refused",
+  "recommendation": "Retry the request; if it persists, check network connectivity to the target.",
+  "retryable": true,
+  "category": "network"
+}
+```
 
 ---
 
@@ -504,6 +717,8 @@ Found a security issue? Please report it privately rather than opening a public 
 - Never expose credentials to the MCP layer
 - Never hardcode infrastructure — always resolve through inventory
 
+Adding a new integration? See [`docs/ADDING_AN_ADAPTER.md`](docs/ADDING_AN_ADAPTER.md) for the full walkthrough.
+
 ---
 
 ## CI/CD
@@ -533,6 +748,9 @@ Commit messages therefore need to follow Conventional Commits (`feat:`, `fix:`, 
 ---
 
 ## Roadmap
+
+**Shipped:** Linux · Docker · Kubernetes · Grafana · Proxmox · Cisco
+**Not started:** MikroTik · UniFi · Prometheus/Loki/Tempo/Alertmanager · Home Assistant · AI-composite tools · AWS/Azure/GCP/VMware/...
 
 Implemented versions are listed under [Current Features](#current-features) and tracked feature-by-feature in [`PROGRESS.md`](PROGRESS.md). Everything below is **not started**.
 
@@ -579,12 +797,12 @@ AWS, Azure, GCP, VMware, TrueNAS, Ceph, Synology, IPMI, Redfish, OpenStack, Noma
 Contributions are welcome — this is an early-stage project and there's a lot of surface area left on the roadmap above.
 
 1. Fork the repo and create a feature branch.
-2. Follow the existing package/adapter pattern: one isolated package per integration under `internal/`, a matching set of tools under `mcp/tools/`, wired into `cmd/server/main.go`.
+2. Follow the existing package/adapter pattern: one isolated package per integration under `internal/`, a matching set of tools under `mcp/tools/`, wired into `cmd/server/main.go` — see [`docs/ADDING_AN_ADAPTER.md`](docs/ADDING_AN_ADAPTER.md) for the full walkthrough.
 3. Match the existing conventions: structured errors via `internal/toolerr`, structured logging via the `withLogging` wrapper, inventory-driven targets, no shell interpolation of user input.
 4. Add tests — unit tests for adapters/parsing, and at least one test that exercises new tools through the real MCP protocol.
 5. Run `go build ./... && go vet ./... && gofmt -l . && go test ./... -race -cover` and, if you have it installed, `golangci-lint run ./...` before opening a PR — this is exactly what `ci.yml` runs, and it's a **required, non-optional check** on every PR into `main` (see [CI/CD](#cicd)).
 6. Use [Conventional Commits](https://www.conventionalcommits.org) for your commit messages (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`, `ci:`, ...) — the version bump, `CHANGELOG.md`, and release on merge are generated automatically from them.
-7. Open a pull request describing what changed and why.
+7. Open a pull request describing what changed and why. For an architectural decision (not just "add tool #N following the existing pattern"), add an ADR under [`docs/adr/`](docs/adr/).
 
 For larger changes (a new adapter, a new version's worth of tools), consider opening an issue first to discuss the approach.
 

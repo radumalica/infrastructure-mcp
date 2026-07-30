@@ -1,0 +1,21 @@
+{
+  "_comment": "This is the two-step confirm gate every mutating tool uses (docker_restart, proxmox_start_vm, proxmox_stop_vm, proxmox_snapshot). Call again with confirm: true to actually act — see ADR 0007.",
+
+  "unconfirmed_request": { "server": "archive", "container": "prometheus", "confirm": false },
+  "unconfirmed_response": {
+    "server": "archive",
+    "container": "prometheus",
+    "status": "confirmation_required",
+    "message": "Set confirm: true to restart this container. No action was taken.",
+    "timestamp": "2026-07-30T09:00:00Z"
+  },
+
+  "confirmed_request": { "server": "archive", "container": "prometheus", "confirm": true },
+  "confirmed_response": {
+    "server": "archive",
+    "container": "prometheus",
+    "status": "restarted",
+    "message": "Container restarted.",
+    "timestamp": "2026-07-30T09:00:05Z"
+  }
+}

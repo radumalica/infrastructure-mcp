@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "infrastructure": {
+      "command": "/path/to/bin/infrastructure-mcp",
+      "args": ["-inventory", "/path/to/configs/inventory.yaml"]
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "device": "core-sw",
+  "interfaces": [
+    { "interface": "Vlan1", "ip_address": "unassigned", "ok": "YES", "method": "unset", "status": "administratively down", "protocol": "down" },
+    { "interface": "Vlan100", "ip_address": "10.0.0.22", "ok": "YES", "method": "NVRAM", "status": "up", "protocol": "up" },
+    { "interface": "GigabitEthernet1/0/1", "ip_address": "unassigned", "ok": "YES", "method": "unset", "status": "up", "protocol": "up" },
+    { "interface": "GigabitEthernet1/0/2", "ip_address": "unassigned", "ok": "YES", "method": "unset", "status": "down", "protocol": "down" },
+    { "interface": "Port-channel1", "ip_address": "unassigned", "ok": "YES", "method": "unset", "status": "up", "protocol": "up" }
+  ],
+  "timestamp": "2026-07-30T09:00:00Z"
+}
