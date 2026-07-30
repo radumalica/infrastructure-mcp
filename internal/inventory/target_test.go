@@ -35,6 +35,12 @@ switches:
     protocol: ssh
     legacy_crypto: true
     port: 22022
+
+  keyed-sw:
+    hostname: 10.0.0.21
+    vendor: mikrotik
+    user: ubuntu
+    key: ~/.ssh/id_rsa
 `
 
 func TestTarget_Server(t *testing.T) {
@@ -112,6 +118,27 @@ func TestTarget_LegacyCryptoSwitch(t *testing.T) {
 	}
 	if target.Port != 22022 {
 		t.Errorf("Port = %d, want 22022", target.Port)
+	}
+}
+
+func TestTarget_KeyedSwitch(t *testing.T) {
+	inv, err := Parse([]byte(targetTestYAML))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	target, err := inv.Target("keyed-sw")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if target.Key != "~/.ssh/id_rsa" {
+		t.Errorf("Key = %q, want ~/.ssh/id_rsa", target.Key)
+	}
+	if target.Password != "" {
+		t.Errorf("Password = %q, want empty", target.Password)
+	}
+	if target.Vendor != "mikrotik" {
+		t.Errorf("Vendor = %q, want mikrotik", target.Vendor)
 	}
 }
 

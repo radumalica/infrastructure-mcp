@@ -87,6 +87,7 @@ func networkDeviceTarget(name string, d NetworkDevice) Target {
 		Port:         d.Port,
 		User:         d.User,
 		Password:     d.Password,
+		Key:          d.Key,
 		ProxyJump:    d.ProxyJump,
 		Protocol:     protocol,
 		LegacyCrypto: d.LegacyCrypto,

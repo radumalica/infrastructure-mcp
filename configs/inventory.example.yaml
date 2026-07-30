@@ -53,6 +53,15 @@ switches:
     password: ${ANCIENT_SW_PASSWORD}
     legacy_crypto: true
 
+  # Most switches/routers only support user/password, but a few do accept
+  # public-key auth (an imported authorized key on a Cisco switch,
+  # MikroTik's /user ssh-keys, ...) — same key field as servers.
+  keyed-sw:
+    hostname: 10.0.0.22
+    vendor: mikrotik
+    user: admin
+    key: ~/.ssh/id_rsa
+
 # Each entry is keyed by name, so multiple instances of the same service
 # (per-environment Grafanas, multiple Proxmox clusters, ...) live side by
 # side under one key instead of the schema only ever allowing one.
