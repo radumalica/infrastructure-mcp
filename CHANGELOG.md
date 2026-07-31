@@ -1,4 +1,14 @@
-## v0.5.0 - 2026-07-30
+## v0.5.1 - 2026-07-31
+#### Bug Fixes
+- update docs - (fde18ca) - Radu
+#### Documentation
+- (**changelog**) update for v0.5.0 [skip ci] - (a075adf) - repo-gha[bot]
+#### Miscellaneous
+- (**docs**) update RADME - (673c16e) - Radu
+
+- - -
+
+## v0.5.0 - 2026-07-31
 #### Features
 - add banner SVG for project branding in README - (cd6ee91) - tox
 #### Documentation
@@ -7,7 +17,7 @@
 
 - - -
 
-## v0.4.0 - 2026-07-30
+## v0.4.0 - 2026-07-31
 #### Features
 - support SSH public-key auth for routers/switches (#16) - (c53f85b) - Radu
 #### Documentation
@@ -15,7 +25,7 @@
 
 - - -
 
-## v0.3.0 - 2026-07-30
+## v0.3.0 - 2026-07-31
 #### Features
 - v0.7 (partial) Networking — Cisco read-only diagnostics (#11) - (2b7fc21) - Radu
 - v0.6 Proxmox (nodes, VMs, tasks, start/stop/snapshot) (#9) - (cd01ab4) - Radu
@@ -37,7 +47,7 @@
 
 - - -
 
-## v0.2.0 - 2026-07-30
+## v0.2.0 - 2026-07-31
 #### Features
 - v0.4 Kubernetes + v0.5 Grafana tools (#7) - (42c546d) - Radu
 #### Miscellaneous
@@ -46,14 +56,14 @@
 
 - - -
 
-## v0.1.1 - 2026-07-30
+## v0.1.1 - 2026-07-31
 #### Bug Fixes
 - require a bearer token on -transport=http (#4) - (cf61e73) - Radu
 - require a bearer token on -transport=http (security) - (a76e553) - tox
 
 - - -
 
-## v0.1.0 - 2026-07-30
+## v0.1.0 - 2026-07-31
 #### Features
 - implement GitHub workflows for release management, conventional commit checks, and security scanning (#2) - (3f753c4) - Radu
 - implement GitHub workflows for release management, conventional commit checks, and security scanning - (0b59ab9) - tox
@@ -66,7 +76,7 @@
 
 - - -
 
-## v0.0.0 - 2026-07-30
+## v0.0.0 - 2026-07-31
 #### Features
 - CI/CD pipelines, Docker packaging, and remote MCP transport - (cddbd3e) - tox
 - v0.3 Docker tools (docker_ps, docker_logs, docker_stats, docker_restart, docker_images) - (c3bb722) - tox
