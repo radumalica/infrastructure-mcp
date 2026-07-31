@@ -305,7 +305,7 @@ infrastructure-mcp/
 ### Build from source
 
 ```bash
-git clone https://github.com/<your-org>/infrastructure-mcp.git
+git clone https://github.com/radumalica/infrastructure-mcp.git
 cd infrastructure-mcp
 go build -o bin/infrastructure-mcp ./cmd/server
 ```
@@ -315,7 +315,7 @@ go build -o bin/infrastructure-mcp ./cmd/server
 Pre-built multi-arch images (`linux/amd64`, `linux/arm64`) are published to GHCR on every merge to `main` (see [CI/CD](#cicd)):
 
 ```bash
-docker pull ghcr.io/<your-org>/infrastructure-mcp:latest
+docker pull ghcr.io/radumalica/infrastructure-mcp:latest
 ```
 
 Or with Docker Compose, which wires up the inventory and SSH volume mounts for you — see [`docker-compose.yaml`](docker-compose.yaml):
