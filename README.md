@@ -30,7 +30,7 @@ A self-hosted [Model Context Protocol](https://modelcontextprotocol.io) server t
 ## Quick Start
 
 ```bash
-git clone https://github.com/<your-org>/infrastructure-mcp.git
+git clone https://github.com/radumalica/infrastructure-mcp.git
 cd infrastructure-mcp
 go build -o bin/infrastructure-mcp ./cmd/server
 
