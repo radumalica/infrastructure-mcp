@@ -661,9 +661,16 @@ Same params as `proxmox_start_vm` plus `name` (snapshot name, required).
 |---|---|---|
 | `device` | yes | inventory router/switch name |
 
-Returns the running-config text as-is (`config` field), single command with
-no session setup — if the device paginates output, only the first page
-comes back. Not shown here for brevity; see `cisco_backup.go`.
+Returns the running-config text as-is (`config` field). Not shown here for
+brevity; see `cisco_backup.go`.
+
+Pagination: Telnet-connected devices get `terminal length 0` sent
+automatically first (Telnet sessions are persistent, so this actually takes
+effect); SSH-connected devices do not, since SSH runs one command per
+ephemeral exec channel and pagination settings don't carry over between
+calls — if an SSH-connected device's default page length isn't already
+unlimited, only the first `--More--` page comes back. Configure
+`terminal length 0` on the device itself for SSH-reached targets.
 
 ---
 

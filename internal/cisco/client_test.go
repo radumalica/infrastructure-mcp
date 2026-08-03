@@ -14,10 +14,21 @@ type fakeRunner struct {
 	err     error
 	sawCmd  string
 	sawName string
+	sawCmds []string
+	// results, if non-nil, is consumed one entry per call (in order),
+	// overriding result for that call — used by tests that need to
+	// assert on a multi-command sequence (e.g. Backup over Telnet).
+	results []ssh.Result
 }
 
 func (f *fakeRunner) Run(_ context.Context, target, command string) (ssh.Result, error) {
 	f.sawName, f.sawCmd = target, command
+	f.sawCmds = append(f.sawCmds, command)
+	if len(f.results) > 0 {
+		res := f.results[0]
+		f.results = f.results[1:]
+		return res, f.err
+	}
 	return f.result, f.err
 }
 
@@ -43,6 +54,51 @@ func TestBackup(t *testing.T) {
 	}
 	if runner.sawCmd != "show running-config" {
 		t.Errorf("sawCmd = %q", runner.sawCmd)
+	}
+}
+
+func TestBackup_TelnetDisablesPagingFirst(t *testing.T) {
+	runner := &fakeRunner{results: []ssh.Result{
+		{Stdout: ""},                      // terminal length 0
+		{Stdout: "hostname router1\n!\n"}, // show running-config
+	}}
+	c := New(runner, fakeVendorLookup{target: inventory.Target{Vendor: "cisco", Protocol: inventory.ProtocolTelnet}})
+
+	out, err := c.Backup(context.Background(), "core")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != "hostname router1\n!\n" {
+		t.Errorf("unexpected output: %q", out)
+	}
+	if len(runner.sawCmds) != 2 || runner.sawCmds[0] != "terminal length 0" || runner.sawCmds[1] != "show running-config" {
+		t.Errorf("unexpected command sequence: %v", runner.sawCmds)
+	}
+}
+
+func TestBackup_TelnetPagingDisableFails(t *testing.T) {
+	runner := &fakeRunner{results: []ssh.Result{
+		{ExitCode: 1, Stderr: "connection reset"},
+	}}
+	c := New(runner, fakeVendorLookup{target: inventory.Target{Vendor: "cisco", Protocol: inventory.ProtocolTelnet}})
+
+	if _, err := c.Backup(context.Background(), "core"); err == nil {
+		t.Fatal("expected an error when disabling paging fails")
+	}
+	if len(runner.sawCmds) != 1 {
+		t.Errorf("expected show running-config to be skipped after the paging command failed, got %v", runner.sawCmds)
+	}
+}
+
+func TestBackup_SSHSendsOnlyOneCommand(t *testing.T) {
+	runner := &fakeRunner{result: ssh.Result{Stdout: "hostname router1\n!\n"}}
+	c := New(runner, fakeVendorLookup{target: inventory.Target{Vendor: "cisco", Protocol: inventory.ProtocolSSH}})
+
+	if _, err := c.Backup(context.Background(), "core"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(runner.sawCmds) != 1 || runner.sawCmds[0] != "show running-config" {
+		t.Errorf("expected exactly one command over SSH, got %v", runner.sawCmds)
 	}
 }
 
