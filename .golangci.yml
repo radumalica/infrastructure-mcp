@@ -42,6 +42,17 @@ linters:
         linters:
           - gosec
         text: "G704"
+      # Per-instance, opt-in TLS verification bypass (ServiceEndpoint.
+      # InsecureSkipVerify), documented lab/dev-only — same posture as
+      # -insecure-ignore-host-key for SSH, never a global default.
+      - path: internal/grafana/client\.go
+        linters:
+          - gosec
+        text: "G402"
+      - path: internal/proxmox/client\.go
+        linters:
+          - gosec
+        text: "G402"
 
 formatters:
   enable:

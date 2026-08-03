@@ -33,7 +33,7 @@ This file is the single progress log — updated after each completed feature, w
 | operator-features | `kubectl_exec` — pod-scoped equivalent of `run_command` | done |
 | operator-features | `cisco_backup` pagination fix (`terminal length 0`) | done (Telnet only; SSH limitation documented, not fixed) |
 | operator-features | `cisco_backup_diff` — config drift detection | done |
-| operator-features | `insecure_skip_verify` per-instance TLS opt-in (Grafana/Proxmox) | not started |
+| operator-features | `insecure_skip_verify` per-instance TLS opt-in (Grafana/Proxmox) | done |
 | operator-features | `dry_run` convention on mutating tools | not started |
 | operator-features | Audit history MCP resource | not started |
 | operator-features | `diagnose_docker()` composite tool | not started |
@@ -283,6 +283,16 @@ New `internal/backupstore` package plus the `cisco_backup_diff` tool: fetches a 
 - New flag: `-backup-dir` (default `configs/backups`), wired to `backupstore.New` in `cmd/server/main.go`; the directory is created lazily on first `SaveAndDiff` call, not at startup.
 - `cisco_backup`'s tool description and `docs/TOOL_REFERENCE.md` entry were also corrected in this pass — they still said "single command, no session setup, first page only" for every transport, which became inaccurate the moment the previous entry (pagination fix) shipped Telnet-specific behavior; missed updating them in that commit, fixed here.
 - Tests: `internal/backupstore/store_test.go` (first-snapshot, no-change, changed-with-diff-content-assertions, persistence across separate `*Store` instances sharing a directory, path-traversal rejection, directory auto-creation) and `mcp/tools/cisco_backup_diff_test.go` (MCP-protocol round-trip against a real `*backupstore.Store` rooted at `t.TempDir()`, not a fake — the store's own logic is already unit-tested, so this only needed to prove the wiring). Full local gate green: `gofmt`, `go build`, `go vet`, `go test ./... -race -cover`.
+
+### 2026-08-03 — operator-features: `insecure_skip_verify` per-instance TLS opt-in
+
+Resolves the "known limitation, not fixed here" this project's own v0.6 Proxmox PROGRESS.md entry called out: a stock Proxmox install's self-signed :8006 certificate makes `internal/proxmox.Client` refuse to connect out of the box, with no opt-out.
+
+- **`inventory.ServiceEndpoint` gained `InsecureSkipVerify bool`** (`yaml: insecure_skip_verify`), applying to both Grafana and Proxmox (the two `ServiceEndpoint`-based adapters) since it's a property of the shared schema type, not vendor-specific. **Opt-in and per-instance, never a global flag** — the same posture `-insecure-ignore-host-key` already established for SSH host-key verification, called out explicitly in the field's doc comment so a future reader doesn't propose a global toggle instead.
+- **Both `internal/grafana.Client` and `internal/proxmox.Client` now hold a `map[string]*http.Client` of lazily-built, cached "insecure" clients** (one per opted-in instance, built once via `http.DefaultTransport.(*http.Transport).Clone()` with `TLSClientConfig.InsecureSkipVerify` set), guarded by a mutex — the normal shared `httpClient` is untouched and still used for every instance that doesn't opt in. This mirrors the existing per-instance-credential pattern (bearer vs. basic auth) rather than introducing a second construction path.
+- **`.golangci.yml` gained two narrow `gosec` G402 exclusions** (`internal/grafana/client.go`, `internal/proxmox/client.go`), following the exact precedent already set for `internal/inventory/loader.go`/`internal/ssh/auth.go` (G304) — a narrow, per-file, documented exception for an intentional and already-safety-gated pattern, not a blanket gosec disable.
+- Tests: for both packages, `TestDoRequest_SelfSignedCert_RejectedByDefault` (using `httptest.NewTLSServer` and a bare `&http.Client{}`, not `srv.Client()` which would already trust the test cert — this proves the *default* is actually safe) and `TestDoRequest_InsecureSkipVerify` (proves the opt-in actually connects, and that the per-instance client is cached rather than rebuilt every call). `configs/inventory.example.yaml` and README's inventory example both got a commented-out `insecure_skip_verify: true` line on the Proxmox entry with the same lab-only caveat; confirmed the example file still parses via a throwaway `inventory.Load` check (not committed — same "confirm example files actually load" habit as the v0.4/v0.7 entries above), not just eyeballed.
+- Full local gate green: `gofmt`, `go build`, `go vet`, `go test ./... -race -cover`.
 
 ## Decisions & Deviations from a literal README reading
 

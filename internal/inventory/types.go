@@ -62,6 +62,13 @@ type ServiceEndpoint struct {
 	Token    string `yaml:"token"`
 	User     string `yaml:"user"`
 	Password string `yaml:"password"`
+
+	// InsecureSkipVerify disables TLS certificate verification for this
+	// one instance's requests — e.g. a stock Proxmox install's
+	// self-signed certificate on :8006. Opt-in and per-instance, never a
+	// global flag, the same posture as -insecure-ignore-host-key for SSH:
+	// lab/dev use only, never set against production infrastructure.
+	InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
 }
 
 // KubeCluster describes a Kubernetes cluster reachable via a kubeconfig

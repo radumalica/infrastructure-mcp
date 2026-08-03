@@ -198,3 +198,34 @@ func TestDoRequest_NoToken(t *testing.T) {
 		t.Errorf("expected ErrNoToken, got %v", err)
 	}
 }
+
+// TestDoRequest_SelfSignedCert_RejectedByDefault proves the safe
+// default — the exact scenario this project's own PROGRESS.md already
+// flags as a known limitation (a stock Proxmox install's self-signed
+// :8006 certificate) is rejected unless the instance explicitly opts
+// into InsecureSkipVerify. Uses a plain *http.Client, not srv.Client()
+// (which already trusts the test server's cert).
+func TestDoRequest_SelfSignedCert_RejectedByDefault(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{}})
+	}))
+	defer srv.Close()
+
+	c := New(fakeLookup{ep: inventory.ServiceEndpoint{URL: srv.URL, Token: "secret"}}, &http.Client{})
+	if _, err := c.ListNodes(context.Background(), "lab"); err == nil {
+		t.Fatal("expected a certificate verification error against a self-signed cert by default")
+	}
+}
+
+// TestDoRequest_InsecureSkipVerify proves the opt-in actually works.
+func TestDoRequest_InsecureSkipVerify(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{}})
+	}))
+	defer srv.Close()
+
+	c := New(fakeLookup{ep: inventory.ServiceEndpoint{URL: srv.URL, Token: "secret", InsecureSkipVerify: true}}, &http.Client{})
+	if _, err := c.ListNodes(context.Background(), "lab"); err != nil {
+		t.Fatalf("unexpected error with InsecureSkipVerify set: %v", err)
+	}
+}

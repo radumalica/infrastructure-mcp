@@ -402,6 +402,8 @@ proxmox:
   lab:
     url: https://pve.lab.local:8006
     token: ${PROXMOX_TOKEN}
+    # insecure_skip_verify: true   # only for a stock Proxmox's self-signed
+                                    # cert — lab/dev only, never production
 
 # All auth (client cert, bearer token, exec plugin, ...) lives inside the
 # kubeconfig file itself — nothing is inlined into the inventory.
@@ -692,6 +694,7 @@ Tools never return a raw Go error. Every failure is shaped as:
 - Read-only by default
 - Dangerous actions require explicit confirmation (e.g. `docker_restart` requires `confirm: true` and is a no-op otherwise)
 - `-transport=http` is fail-closed: it refuses to start without a bearer token (`MCP_HTTP_TOKEN`) unless `-allow-anonymous-http` is explicitly passed
+- TLS certificate verification is on by default for Grafana/Proxmox; `insecure_skip_verify: true` disables it per-instance — lab/dev only, same posture as `-insecure-ignore-host-key` for SSH
 
 Found a security issue? Please report it privately rather than opening a public issue — see [Contributing](#contributing).
 

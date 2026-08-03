@@ -2,6 +2,7 @@ package grafana
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"infrastructure-mcp/internal/inventory"
@@ -30,6 +32,9 @@ type EndpointLookup interface {
 type Client struct {
 	inv        EndpointLookup
 	httpClient *http.Client
+
+	mu              sync.Mutex
+	insecureClients map[string]*http.Client
 }
 
 // New creates a Client that resolves instance names against inv, using
@@ -39,7 +44,31 @@ func New(inv EndpointLookup, httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 15 * time.Second}
 	}
-	return &Client{inv: inv, httpClient: httpClient}
+	return &Client{inv: inv, httpClient: httpClient, insecureClients: make(map[string]*http.Client)}
+}
+
+// httpClientFor returns the Client's normal shared http.Client, unless
+// instance's inventory entry opts into InsecureSkipVerify, in which case
+// it returns a dedicated client (built once, then cached) with TLS
+// certificate verification disabled — never done globally, only for the
+// one instance that explicitly asked for it.
+func (c *Client) httpClientFor(instance string, ep inventory.ServiceEndpoint) *http.Client {
+	if !ep.InsecureSkipVerify {
+		return c.httpClient
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if cl, ok := c.insecureClients[instance]; ok {
+		return cl
+	}
+
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // explicit, per-instance, documented lab/dev opt-in — see ServiceEndpoint.InsecureSkipVerify
+	cl := &http.Client{Timeout: c.httpClient.Timeout, Transport: transport}
+	c.insecureClients[instance] = cl
+	return cl
 }
 
 func (c *Client) doRequest(ctx context.Context, instance, method, path string, query url.Values, body any) ([]byte, error) {
@@ -77,7 +106,7 @@ func (c *Client) doRequest(ctx context.Context, instance, method, path string, q
 		req.SetBasicAuth(ep.User, ep.Password)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClientFor(instance, ep).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("grafana: request to instance %q: %w", instance, err)
 	}
