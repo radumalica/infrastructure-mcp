@@ -108,6 +108,7 @@ Tools implemented and tested against the real MCP protocol so far:
 - `kubectl_events` — recent cluster events, most recent first
 - `kubectl_describe` — structured pod summary (spec/status highlights + recent events)
 - `kubectl_nodes` — node list with readiness, roles, and capacity
+- `kubectl_exec` — run a command inside a pod's container, the pod-scoped equivalent of `run_command`/`docker_exec`
 
 **Grafana (v0.5)**
 - `grafana_alerts` — currently firing/resolved alert instances from the alerting API

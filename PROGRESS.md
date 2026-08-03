@@ -30,7 +30,7 @@ This file is the single progress log — updated after each completed feature, w
 | v0.9+ | Home Assistant | not started |
 | v1.0 | AI-oriented composite tools | not started |
 | operator-features | `docker_exec` — container-scoped equivalent of `run_command` | done |
-| operator-features | `kubectl_exec` — pod-scoped equivalent of `run_command` | not started |
+| operator-features | `kubectl_exec` — pod-scoped equivalent of `run_command` | done |
 | operator-features | `cisco_backup` pagination fix (`terminal length 0`) | not started |
 | operator-features | `cisco_backup_diff` — config drift detection | not started |
 | operator-features | `insecure_skip_verify` per-instance TLS opt-in (Grafana/Proxmox) | not started |
@@ -250,6 +250,17 @@ User asked for a batch of operator-facing improvements proposed after a full doc
 - **A non-zero exit code is data, not an adapter error** — same reasoning as `run_command`'s `exit_code` field: a command run inside a container (e.g. `grep` finding nothing) can legitimately fail without the exec mechanism itself failing. This is a deliberate divergence from `Restart`/other docker methods, which do treat non-zero exit as an error, because those methods invoke one specific docker subcommand whose failure always means something went wrong, whereas `Exec`'s payload is an arbitrary user command.
 - **Free-form command text is shell-quoted, not whitelisted** — `internal/docker.shellQuoteSingle` wraps the command in single quotes (escaping embedded `'` as `'\''`) before embedding it as the single argument to the container's `sh -c`, so it reaches the remote command as one opaque string regardless of contents. The container reference itself still goes through the existing `validateContainerRef` whitelist pattern unchanged.
 - Tests: `internal/docker/client_test.go` (adapter-level, including an embedded-single-quote regression test) and `mcp/tools/docker_test.go` (MCP-protocol round-trip, non-zero-exit-is-not-an-error, adapter-error path). Full local gate green: `gofmt`, `go build`, `go vet`, `go test ./... -race -cover`.
+
+### 2026-08-03 — operator-features: `kubectl_exec`
+
+Pod-scoped equivalent of `docker_exec`, using the Kubernetes exec sub-resource (`POST .../pods/{pod}/exec`, SPDY-upgraded stream) rather than an SSH-exec'd CLI command.
+
+- **`internal/kubernetes.Client` now caches a `*rest.Config` alongside each cluster's clientset** (`clusterConn{clientset, restConfig}`, replacing the old `clientset map[string]kubernetes.Interface` field) — every other method only ever needed the clientset, but `Exec` has to build its own SPDY-upgraded connection and therefore needs the raw REST config too.
+- **The exec request is built via `rest.RESTClientFor`, not `clientset.CoreV1().RESTClient()`** — deliberately, not incidentally: the fake clientset (`k8s.io/client-go/kubernetes/fake`) used by every test in this package returns a `nil` `RESTClient()` (it has no real transport), so building the request "for real" (mirroring typed corev1 client's own `setConfigDefaults`: `GroupVersion`/`APIPath`/`NegotiatedSerializer`) is what makes this testable at all, not a workaround.
+- **The actual SPDY stream is behind an injectable `Client.stream` field** (`streamFunc`), not a hardcoded `remotecommand.NewSPDYExecutor` call — same reasoning as `internal/kubernetes/client_test.go`'s existing fake-clientset pattern, extended to cover the one operation the fake clientset structurally cannot simulate (a raw HTTP connection upgrade is not a REST verb a reactor can intercept). Production code (`New()`) wires the real `defaultStream`; tests substitute a fake that returns canned stdout/stderr/exit-code.
+- **A non-zero exit code is data, not a Go error** — same convention as `docker_exec`/`run_command`: `remotecommand`'s stream returns an error whose type satisfies `interface{ ExitStatus() int }` (`k8s.io/client-go/util/exec.CodeExitError`) when the command inside the container exits non-zero; `defaultStream` detects this via `errors.As` against that inline interface (not the concrete type, since importing `k8s.io/client-go/util/exec` just for a type assertion felt like overkill for a single method check) and reports it as `ExecResult.ExitCode` rather than surfacing it as an adapter error.
+- **New transitive dependencies**: `k8s.io/client-go/tools/remotecommand` pulled in `github.com/gorilla/websocket`, `github.com/moby/spdystream`, and `k8s.io/streaming` — all added via `go get k8s.io/client-go/tools/remotecommand@v0.36.3` (matching the already-pinned `k8s.io/client-go` version) rather than hand-edited into `go.mod`/`go.sum`.
+- Tests: `internal/kubernetes/client_test.go` (`TestExec*`, using the injected `stream` field and a `testClientWithConfig` helper that seeds a usable `*rest.Config`) and `mcp/tools/kubernetes_test.go` (MCP-protocol round-trip, non-zero-exit-is-not-an-error). Full local gate green: `gofmt`, `go build`, `go vet`, `go test ./... -race -cover`.
 
 ## Decisions & Deviations from a literal README reading
 

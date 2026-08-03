@@ -121,6 +121,7 @@ func run() error {
 	tools.RegisterKubectlEvents(server, logger, kubeClient)
 	tools.RegisterKubectlDescribe(server, logger, kubeClient)
 	tools.RegisterKubectlNodes(server, logger, kubeClient)
+	tools.RegisterKubectlExec(server, logger, kubeClient)
 	tools.RegisterGrafanaAlerts(server, logger, grafanaClient)
 	tools.RegisterGrafanaDashboards(server, logger, grafanaClient)
 	tools.RegisterGrafanaAnnotations(server, logger, grafanaClient)

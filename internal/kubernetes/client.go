@@ -1,8 +1,12 @@
 package kubernetes
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	neturl "net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -10,7 +14,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/remotecommand"
 
 	"infrastructure-mcp/internal/inventory"
 )
@@ -21,32 +28,57 @@ type ClusterLookup interface {
 	KubeCluster(name string) (inventory.KubeCluster, error)
 }
 
+// clusterConn caches everything Exec needs alongside the clientset: the
+// clientset alone is enough for every other method, but Exec has to build
+// its own SPDY-upgraded connection and therefore needs the raw *rest.Config
+// too.
+type clusterConn struct {
+	clientset  kubernetes.Interface
+	restConfig *rest.Config
+}
+
 // Client resolves inventory Kubernetes cluster names to a cached
 // *kubernetes.Clientset per cluster, building each lazily from its
 // kubeconfig on first use. Safe for concurrent use.
 type Client struct {
 	inv ClusterLookup
 
-	mu        sync.Mutex
-	clientset map[string]kubernetes.Interface
+	mu    sync.Mutex
+	conns map[string]clusterConn
+
+	// stream performs the exec sub-resource's SPDY stream. A field
+	// (rather than a hardcoded call to remotecommand.NewSPDYExecutor) so
+	// tests can substitute a fake — the fake kubernetes.Interface used
+	// everywhere else in this package has no real exec sub-resource to
+	// hit, since it's a raw HTTP connection upgrade, not a REST verb a
+	// reactor can intercept.
+	stream streamFunc
 }
 
 // New creates a Client that resolves cluster names against inv.
 func New(inv ClusterLookup) *Client {
-	return &Client{inv: inv, clientset: make(map[string]kubernetes.Interface)}
+	return &Client{inv: inv, conns: make(map[string]clusterConn), stream: defaultStream}
 }
 
 func (c *Client) clientFor(cluster string) (kubernetes.Interface, error) {
+	conn, err := c.connFor(cluster)
+	if err != nil {
+		return nil, err
+	}
+	return conn.clientset, nil
+}
+
+func (c *Client) connFor(cluster string) (clusterConn, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if cs, ok := c.clientset[cluster]; ok {
-		return cs, nil
+	if conn, ok := c.conns[cluster]; ok {
+		return conn, nil
 	}
 
 	kc, err := c.inv.KubeCluster(cluster)
 	if err != nil {
-		return nil, err
+		return clusterConn{}, err
 	}
 
 	loadingRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: kc.Kubeconfig}
@@ -56,16 +88,17 @@ func (c *Client) clientFor(cluster string) (kubernetes.Interface, error) {
 	}
 	restConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides).ClientConfig()
 	if err != nil {
-		return nil, fmt.Errorf("kubernetes: build client config for cluster %q: %w", cluster, err)
+		return clusterConn{}, fmt.Errorf("kubernetes: build client config for cluster %q: %w", cluster, err)
 	}
 
 	cs, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		return nil, fmt.Errorf("kubernetes: build clientset for cluster %q: %w", cluster, err)
+		return clusterConn{}, fmt.Errorf("kubernetes: build clientset for cluster %q: %w", cluster, err)
 	}
 
-	c.clientset[cluster] = cs
-	return cs, nil
+	conn := clusterConn{clientset: cs, restConfig: restConfig}
+	c.conns[cluster] = conn
+	return conn, nil
 }
 
 // ListPods returns pods in namespace (all namespaces if empty).
@@ -170,6 +203,81 @@ func (c *Client) DescribePod(ctx context.Context, cluster, namespace, pod string
 		Containers: containers,
 		Events:     eventEntries,
 	}, nil
+}
+
+// streamFunc performs one exec sub-resource SPDY stream and returns the
+// captured stdout/stderr and the command's exit code (0 if it completed
+// without a non-zero-exit error).
+type streamFunc func(cfg *rest.Config, method string, url *neturl.URL, stdin io.Reader) (stdout, stderr string, exitCode int, err error)
+
+// defaultStream is streamFunc's real implementation, used outside tests.
+func defaultStream(cfg *rest.Config, method string, url *neturl.URL, stdin io.Reader) (string, string, int, error) {
+	executor, err := remotecommand.NewSPDYExecutor(cfg, method, url)
+	if err != nil {
+		return "", "", 0, err
+	}
+
+	var stdout, stderr bytes.Buffer
+	err = executor.StreamWithContext(context.Background(), remotecommand.StreamOptions{
+		Stdin:  stdin,
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		var exitErr interface{ ExitStatus() int }
+		if errors.As(err, &exitErr) {
+			return stdout.String(), stderr.String(), exitErr.ExitStatus(), nil
+		}
+		return "", "", 0, err
+	}
+	return stdout.String(), stderr.String(), 0, nil
+}
+
+// Exec runs command inside containerName of pod (the pod's only/first
+// container if containerName is empty) via the exec sub-resource — the
+// pod-scoped equivalent of internal/docker.Client.Exec. Like that method,
+// and like the top-level run_command tool it mirrors, a non-zero exit
+// code is reported as data (ExecResult.ExitCode), not a Go error.
+func (c *Client) Exec(ctx context.Context, cluster, namespace, pod, containerName string, command []string) (ExecResult, error) {
+	conn, err := c.connFor(cluster)
+	if err != nil {
+		return ExecResult{}, err
+	}
+
+	// Built directly via rest.RESTClientFor rather than
+	// conn.clientset.CoreV1().RESTClient(): the fake clientset used in
+	// tests returns a nil RESTClient (it has no real transport), so
+	// Exec's own request-building has to stand on its own, the same way
+	// production code would build it. Mirrors typed corev1 client's own
+	// setConfigDefaults (GroupVersion/APIPath/NegotiatedSerializer).
+	execConfig := rest.CopyConfig(conn.restConfig)
+	gv := corev1.SchemeGroupVersion
+	execConfig.GroupVersion = &gv
+	execConfig.APIPath = "/api"
+	execConfig.NegotiatedSerializer = rest.CodecFactoryForGeneratedClient(scheme.Scheme, scheme.Codecs).WithoutConversion()
+
+	restClient, err := rest.RESTClientFor(execConfig)
+	if err != nil {
+		return ExecResult{}, fmt.Errorf("kubernetes: build exec client for cluster %q: %w", cluster, err)
+	}
+
+	req := restClient.Post().
+		Resource("pods").
+		Namespace(namespace).
+		Name(pod).
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: containerName,
+			Command:   command,
+			Stdout:    true,
+			Stderr:    true,
+		}, scheme.ParameterCodec)
+
+	stdout, stderr, exitCode, err := c.stream(execConfig, "POST", req.URL(), nil)
+	if err != nil {
+		return ExecResult{}, fmt.Errorf("kubernetes: exec in pod %q: %w", pod, err)
+	}
+	return ExecResult{Stdout: stdout, Stderr: stderr, ExitCode: exitCode}, nil
 }
 
 // ListNodes returns every node in the cluster.

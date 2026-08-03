@@ -416,6 +416,22 @@ Container-scoped equivalent of `run_command` — not confirm-gated, following `r
 }
 ```
 
+### `kubectl_exec`
+
+Pod-scoped equivalent of `run_command`/`docker_exec` — not confirm-gated. A non-zero `exit_code` is reported as data, not a tool error.
+
+| Param | Required | Description |
+|---|---|---|
+| `cluster` | yes | inventory kubernetes cluster name |
+| `namespace` | yes | namespace the pod is in |
+| `pod` | yes | pod name |
+| `container` | no | container name (default: the pod's only/first container) |
+| `command` | yes | command and args, e.g. `["cat", "/etc/resolv.conf"]` |
+
+```json
+{ "cluster": "home", "namespace": "default", "pod": "app-1", "command": ["cat", "/etc/resolv.conf"], "stdout": "nameserver 10.43.0.10\n", "stderr": "", "exit_code": 0, "timestamp": "2026-07-30T09:00:00Z" }
+```
+
 ## Grafana
 
 ### `grafana_alerts`
