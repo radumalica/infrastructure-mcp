@@ -211,6 +211,60 @@ func TestClient_Restart_NonZeroExit(t *testing.T) {
 	}
 }
 
+func TestClient_Exec(t *testing.T) {
+	runner := &fakeRunner{results: map[string]ssh.Result{
+		"archive|docker exec web sh -c 'echo hi'": {Stdout: "hi\n", ExitCode: 0},
+	}}
+	c := New(runner)
+
+	got, err := c.Exec(context.Background(), "archive", "web", "echo hi")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Stdout != "hi\n" || got.ExitCode != 0 {
+		t.Errorf("unexpected result: %+v", got)
+	}
+}
+
+func TestClient_Exec_QuotesEmbeddedSingleQuotes(t *testing.T) {
+	// shellQuoteSingle("it's ok") == "'it'\''s ok'", so the full remote
+	// command is: docker exec web sh -c 'it'\''s ok'
+	runner := &fakeRunner{results: map[string]ssh.Result{
+		"archive|docker exec web sh -c 'it'\\''s ok'": {Stdout: "it's ok\n", ExitCode: 0},
+	}}
+	c := New(runner)
+
+	got, err := c.Exec(context.Background(), "archive", "web", "it's ok")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Stdout != "it's ok\n" {
+		t.Errorf("unexpected result: %+v", got)
+	}
+}
+
+func TestClient_Exec_NonZeroExitIsNotAnError(t *testing.T) {
+	runner := &fakeRunner{results: map[string]ssh.Result{
+		"archive|docker exec web sh -c 'false'": {ExitCode: 1},
+	}}
+	c := New(runner)
+
+	got, err := c.Exec(context.Background(), "archive", "web", "false")
+	if err != nil {
+		t.Fatalf("expected no error for a non-zero exit, exit code is data: %v", err)
+	}
+	if got.ExitCode != 1 {
+		t.Errorf("ExitCode = %d, want 1", got.ExitCode)
+	}
+}
+
+func TestClient_Exec_InvalidContainer(t *testing.T) {
+	c := New(&fakeRunner{})
+	if _, err := c.Exec(context.Background(), "archive", "web; rm -rf /", "echo hi"); err == nil {
+		t.Fatal("expected validation error")
+	}
+}
+
 func TestClient_RunnerError(t *testing.T) {
 	runner := &fakeRunner{}
 	c := New(runner)

@@ -29,6 +29,18 @@ This file is the single progress log — updated after each completed feature, w
 | v0.8+ | Monitoring (Prometheus/Loki/Alertmanager) | not started |
 | v0.9+ | Home Assistant | not started |
 | v1.0 | AI-oriented composite tools | not started |
+| operator-features | `docker_exec` — container-scoped equivalent of `run_command` | done |
+| operator-features | `kubectl_exec` — pod-scoped equivalent of `run_command` | not started |
+| operator-features | `cisco_backup` pagination fix (`terminal length 0`) | not started |
+| operator-features | `cisco_backup_diff` — config drift detection | not started |
+| operator-features | `insecure_skip_verify` per-instance TLS opt-in (Grafana/Proxmox) | not started |
+| operator-features | `dry_run` convention on mutating tools | not started |
+| operator-features | Audit history MCP resource | not started |
+| operator-features | `diagnose_docker()` composite tool | not started |
+| operator-features | `check_inventory_health()` tool | not started |
+| operator-features | `notify` webhook tool | not started |
+| operator-features | Prometheus/Loki query tools | not started |
+| operator-features | Alertmanager silence tools | not started |
 
 ## Log
 
@@ -229,6 +241,15 @@ User request: `docs/` and `examples/` were empty (git doesn't track empty direct
 - All example values are synthetic (`10.0.0.x` IPs, made-up hostnames) — the real devices this session connected to for live verification never appear in any committed file.
 - README: new `## Examples` section (seven full request/response walkthroughs, cross-checked against the actual `toolerr`/severity recommendation strings rather than paraphrased), Project Structure tree annotated with the new `docs/`/`examples/` contents, Table of Contents updated.
 - Verified every example is real, not just plausible-looking: the four inventory YAML snippets were loaded through the actual `inventory.Parse` (not just eyeballed), and every JSON example's `recommendation`/`message` text was checked against the literal strings in `internal/toolerr/toolerr.go` and `mcp/tools/*.go` rather than paraphrased from memory — this caught and fixed three near-miss recommendation strings before commit.
+
+### 2026-08-03 — operator-features: `docker_exec`
+
+User asked for a batch of operator-facing improvements proposed after a full documentation read (README, ADRs, PROGRESS.md, memory). First landed: `docker_exec`, the container-scoped equivalent of the existing top-level `run_command` tool — `docker exec <container> sh -c '<command>'` over the same `internal/remote.Pool`-backed `Runner` interface `internal/docker`'s other methods already use.
+
+- **Deliberately not confirm-gated**, unlike `docker_restart`. `run_command` itself — the tool this mirrors — has never been confirm-gated despite being able to run anything on a whole server; gating `docker_exec` but not `run_command` would be an inconsistent, false sense of safety. Confirm-gating in this codebase is reserved for a single *named* destructive action (`docker_restart`, `proxmox_start_vm`/`stop_vm`/`snapshot`), not for "arbitrary command" tools.
+- **A non-zero exit code is data, not an adapter error** — same reasoning as `run_command`'s `exit_code` field: a command run inside a container (e.g. `grep` finding nothing) can legitimately fail without the exec mechanism itself failing. This is a deliberate divergence from `Restart`/other docker methods, which do treat non-zero exit as an error, because those methods invoke one specific docker subcommand whose failure always means something went wrong, whereas `Exec`'s payload is an arbitrary user command.
+- **Free-form command text is shell-quoted, not whitelisted** — `internal/docker.shellQuoteSingle` wraps the command in single quotes (escaping embedded `'` as `'\''`) before embedding it as the single argument to the container's `sh -c`, so it reaches the remote command as one opaque string regardless of contents. The container reference itself still goes through the existing `validateContainerRef` whitelist pattern unchanged.
+- Tests: `internal/docker/client_test.go` (adapter-level, including an embedded-single-quote regression test) and `mcp/tools/docker_test.go` (MCP-protocol round-trip, non-zero-exit-is-not-an-error, adapter-error path). Full local gate green: `gofmt`, `go build`, `go vet`, `go test ./... -race -cover`.
 
 ## Decisions & Deviations from a literal README reading
 

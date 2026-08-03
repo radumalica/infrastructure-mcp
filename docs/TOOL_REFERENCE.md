@@ -304,6 +304,20 @@ Confirmed call:
 { "server": "archive", "container": "grafana", "status": "restarted", "message": "Container restarted.", "timestamp": "2026-07-30T09:00:00Z" }
 ```
 
+### `docker_exec`
+
+Container-scoped equivalent of `run_command` — not confirm-gated, following `run_command`'s own convention rather than `docker_restart`'s. A non-zero `exit_code` is reported as data, not a tool error.
+
+| Param | Required | Description |
+|---|---|---|
+| `server` | yes | inventory server name |
+| `container` | yes | container name or ID |
+| `command` | yes | shell command to run inside the container |
+
+```json
+{ "server": "archive", "container": "grafana", "command": "cat /etc/grafana/grafana.ini | grep http_port", "stdout": "http_port = 3000\n", "stderr": "", "exit_code": 0, "timestamp": "2026-07-30T09:00:00Z" }
+```
+
 ## Kubernetes
 
 ### `kubectl_get_pods`

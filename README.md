@@ -100,6 +100,7 @@ Tools implemented and tested against the real MCP protocol so far:
 - `docker_stats` — point-in-time resource usage snapshot
 - `docker_logs` — recent combined stdout/stderr log lines
 - `docker_restart` — restart a container (destructive; requires `confirm: true`)
+- `docker_exec` — run a command inside a running container, the container-scoped equivalent of `run_command`
 
 **Kubernetes (v0.4)**
 - `kubectl_get_pods` — list pods, optionally scoped to a namespace

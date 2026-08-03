@@ -115,6 +115,7 @@ func run() error {
 	tools.RegisterDockerStats(server, logger, dockerClient)
 	tools.RegisterDockerLogs(server, logger, dockerClient)
 	tools.RegisterDockerRestart(server, logger, dockerClient)
+	tools.RegisterDockerExec(server, logger, dockerClient)
 	tools.RegisterKubectlGetPods(server, logger, kubeClient)
 	tools.RegisterKubectlLogs(server, logger, kubeClient)
 	tools.RegisterKubectlEvents(server, logger, kubeClient)

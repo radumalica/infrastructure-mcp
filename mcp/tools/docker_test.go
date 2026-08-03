@@ -18,10 +18,13 @@ type fakeDockerDiagnostics struct {
 	stats        []docker.ContainerStats
 	logs         string
 	restartErr   error
+	execResult   docker.ExecResult
+	execErr      error
 	err          error
 	sawAll       bool
 	sawContainer string
 	sawTail      int
+	sawCommand   string
 }
 
 func (f *fakeDockerDiagnostics) Ps(_ context.Context, _ string, all bool) ([]docker.Container, error) {
@@ -47,6 +50,14 @@ func (f *fakeDockerDiagnostics) Restart(_ context.Context, _, container string) 
 	}
 	return f.err
 }
+func (f *fakeDockerDiagnostics) Exec(_ context.Context, _, container, command string) (docker.ExecResult, error) {
+	f.sawContainer = container
+	f.sawCommand = command
+	if f.execErr != nil {
+		return docker.ExecResult{}, f.execErr
+	}
+	return f.execResult, nil
+}
 
 func newDockerSession(t *testing.T, diag *fakeDockerDiagnostics) *mcp.ClientSession {
 	t.Helper()
@@ -58,6 +69,7 @@ func newDockerSession(t *testing.T, diag *fakeDockerDiagnostics) *mcp.ClientSess
 	RegisterDockerStats(server, testLogger(), diag)
 	RegisterDockerLogs(server, testLogger(), diag)
 	RegisterDockerRestart(server, testLogger(), diag)
+	RegisterDockerExec(server, testLogger(), diag)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	go func() { _, _ = server.Connect(ctx, serverTransport, nil) }()
@@ -241,6 +253,72 @@ func TestDockerRestart_ConfirmedButFails(t *testing.T) {
 	}
 	if !result.IsError {
 		t.Fatal("expected IsError=true for a failing restart")
+	}
+}
+
+func TestDockerExec_ViaMCPProtocol(t *testing.T) {
+	diag := &fakeDockerDiagnostics{execResult: docker.ExecResult{Stdout: "ok\n", ExitCode: 0}}
+	session := newDockerSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "docker_exec",
+		Arguments: map[string]any{"server": "archive", "container": "web", "command": "echo ok"},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+	}
+	if diag.sawContainer != "web" || diag.sawCommand != "echo ok" {
+		t.Errorf("unexpected call: container=%q command=%q", diag.sawContainer, diag.sawCommand)
+	}
+
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out DockerExecOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.Stdout != "ok\n" || out.ExitCode != 0 {
+		t.Errorf("unexpected output: %+v", out)
+	}
+}
+
+func TestDockerExec_NonZeroExitIsNotAnError(t *testing.T) {
+	diag := &fakeDockerDiagnostics{execResult: docker.ExecResult{Stderr: "not found\n", ExitCode: 1}}
+	session := newDockerSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "docker_exec",
+		Arguments: map[string]any{"server": "archive", "container": "web", "command": "false"},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("expected a non-zero exit to be reported as data, not a tool error: err=%v result=%+v", err, result)
+	}
+
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out DockerExecOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.ExitCode != 1 {
+		t.Errorf("ExitCode = %d, want 1", out.ExitCode)
+	}
+}
+
+func TestDockerExec_Error(t *testing.T) {
+	diag := &fakeDockerDiagnostics{execErr: errors.New("docker: no such container")}
+	session := newDockerSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "docker_exec",
+		Arguments: map[string]any{"server": "archive", "container": "web", "command": "echo hi"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool transport error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected IsError=true")
 	}
 }
 
