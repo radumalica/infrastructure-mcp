@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/modelcontextprotocol/go-sdk v1.4.1
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	golang.org/x/crypto v0.54.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.36.3

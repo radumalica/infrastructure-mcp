@@ -130,6 +130,7 @@ Tools implemented and tested against the real MCP protocol so far:
 - `cisco_interfaces` — interface list with IP address, admin/link status, and line protocol
 - `cisco_inventory` — hardware components (chassis, modules, PSUs) with PID/VID/serial number
 - `cisco_logs` — buffered syslog messages, optionally capped to the most recent N lines
+- `cisco_backup_diff` — fetch the running config and diff it against the last snapshot taken by this tool, flagging config drift
 
 **Cross-cutting, since v0.1**
 - Legacy network device support: Telnet transport, SSH legacy-crypto negotiation, transparent per-target protocol dispatch, SSH public-key auth for routers/switches
@@ -433,6 +434,7 @@ More focused, single-concept inventory fragments (key-authenticated network devi
 | `-http-addr` | `:8080` | Address to listen on when `-transport=http` |
 | `-healthcheck` | `false` | Instead of starting the server, GET `-healthcheck-url` and exit 0/1 — used as the container `HEALTHCHECK` |
 | `-allow-anonymous-http` | `false` | Allow `-transport=http` to serve without a bearer token — **lab/dev only**, every tool becomes reachable to anyone who can reach the port |
+| `-backup-dir` | `configs/backups` | Directory `cisco_backup_diff` persists its per-device config snapshots in (created on first use) |
 
 Host key verification is **fail-closed by default**: an unrecognized target's connection is refused unless it's in `known_hosts` or you explicitly opt into insecure mode. `-transport=http` is fail-closed the same way: it refuses to start unless the `MCP_HTTP_TOKEN` environment variable is set (see below) or `-allow-anonymous-http` is passed explicitly.
 

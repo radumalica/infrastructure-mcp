@@ -21,6 +21,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"infrastructure-mcp/internal/backupstore"
 	"infrastructure-mcp/internal/cisco"
 	"infrastructure-mcp/internal/docker"
 	"infrastructure-mcp/internal/grafana"
@@ -52,6 +53,7 @@ func run() error {
 	healthcheck := flag.Bool("healthcheck", false, "instead of starting the server, GET -healthcheck-url and exit 0/1 on success/failure; used as the container HEALTHCHECK (the distroless base image has no shell/curl to run one externally)")
 	healthcheckURL := flag.String("healthcheck-url", "http://127.0.0.1:8080/healthz", "URL checked when -healthcheck is set")
 	allowAnonymousHTTP := flag.Bool("allow-anonymous-http", false, "allow -transport=http to serve without a bearer token (lab/dev only — every tool, including run_command, becomes reachable to anyone who can reach the port)")
+	backupDir := flag.String("backup-dir", "configs/backups", "directory cisco_backup_diff persists its per-device config snapshots in (created on first use)")
 	flag.Parse()
 
 	if *healthcheck {
@@ -137,6 +139,7 @@ func run() error {
 	tools.RegisterCiscoInterfaces(server, logger, ciscoClient)
 	tools.RegisterCiscoInventory(server, logger, ciscoClient)
 	tools.RegisterCiscoLogs(server, logger, ciscoClient)
+	tools.RegisterCiscoBackupDiff(server, logger, ciscoClient, backupstore.New(*backupDir))
 
 	switch *transportKind {
 	case "stdio":

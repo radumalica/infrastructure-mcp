@@ -672,6 +672,32 @@ calls — if an SSH-connected device's default page length isn't already
 unlimited, only the first `--More--` page comes back. Configure
 `terminal length 0` on the device itself for SSH-reached targets.
 
+### `cisco_backup_diff`
+
+| Param | Required | Description |
+|---|---|---|
+| `device` | yes | inventory router/switch name |
+
+Fetches the current running-config (same call as `cisco_backup`) and diffs it against the last snapshot this tool took for the same device, persisted under `-backup-dir` (default `configs/backups`, one file per device, one snapshot — not a rotating history). The first call for a device has nothing to diff against yet.
+
+First call for a device:
+
+```json
+{ "device": "core-sw", "changed": false, "first_snapshot": true, "timestamp": "2026-07-30T09:00:00Z" }
+```
+
+A later call after the config changed:
+
+```json
+{
+  "device": "core-sw",
+  "changed": true,
+  "first_snapshot": false,
+  "diff": "--- previous\n+++ current\n@@ -1,3 +1,3 @@\n hostname router1\n-interface Gi0/1\n+interface Gi0/2\n !\n",
+  "timestamp": "2026-07-30T09:05:00Z"
+}
+```
+
 ---
 
 See [Examples](../README.md#examples) in the README for full request/response
