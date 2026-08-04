@@ -12,6 +12,9 @@ configs/inventory.yaml
 inventory.yaml
 .env
 
+# cisco_backup_diff's persisted config snapshots (can contain device secrets)
+configs/backups/
+
 # IDE
 .idea/
 .vscode/

@@ -42,6 +42,31 @@ linters:
         linters:
           - gosec
         text: "G704"
+      # Per-instance, opt-in TLS verification bypass (ServiceEndpoint.
+      # InsecureSkipVerify), documented lab/dev-only — same posture as
+      # -insecure-ignore-host-key for SSH, never a global default.
+      - path: internal/grafana/client\.go
+        linters:
+          - gosec
+        text: "G402"
+      - path: internal/proxmox/client\.go
+        linters:
+          - gosec
+        text: "G402"
+      # target is validated against targetNamePattern (whitelisted
+      # characters, no path separators) before it's ever joined into a
+      # path — not attacker-controlled file inclusion.
+      - path: internal/backupstore/store\.go
+        linters:
+          - gosec
+        text: "G304"
+      # SSH key / kubeconfig paths come from the already-validated
+      # inventory file itself — same operator-controlled-config posture
+      # as internal/inventory/loader.go and internal/ssh/auth.go above.
+      - path: mcp/tools/check_inventory_health\.go
+        linters:
+          - gosec
+        text: "G304"
 
 formatters:
   enable:

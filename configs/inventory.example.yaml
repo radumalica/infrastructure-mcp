@@ -77,6 +77,8 @@ proxmox:
   lab:
     url: https://pve.lab.local:8006
     token: ${PROXMOX_TOKEN}
+    # insecure_skip_verify: true   # only for a stock Proxmox's self-signed
+                                    # cert — lab/dev only, never production
 
 kubernetes:
   # All auth (client cert, bearer token, exec plugin, ...) lives inside

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"infrastructure-mcp/internal/audit"
 	"infrastructure-mcp/internal/docker"
 	"infrastructure-mcp/internal/ssh"
 )
@@ -18,10 +20,13 @@ type fakeDockerDiagnostics struct {
 	stats        []docker.ContainerStats
 	logs         string
 	restartErr   error
+	execResult   docker.ExecResult
+	execErr      error
 	err          error
 	sawAll       bool
 	sawContainer string
 	sawTail      int
+	sawCommand   string
 }
 
 func (f *fakeDockerDiagnostics) Ps(_ context.Context, _ string, all bool) ([]docker.Container, error) {
@@ -47,6 +52,14 @@ func (f *fakeDockerDiagnostics) Restart(_ context.Context, _, container string) 
 	}
 	return f.err
 }
+func (f *fakeDockerDiagnostics) Exec(_ context.Context, _, container, command string) (docker.ExecResult, error) {
+	f.sawContainer = container
+	f.sawCommand = command
+	if f.execErr != nil {
+		return docker.ExecResult{}, f.execErr
+	}
+	return f.execResult, nil
+}
 
 func newDockerSession(t *testing.T, diag *fakeDockerDiagnostics) *mcp.ClientSession {
 	t.Helper()
@@ -57,7 +70,8 @@ func newDockerSession(t *testing.T, diag *fakeDockerDiagnostics) *mcp.ClientSess
 	RegisterDockerImages(server, testLogger(), diag)
 	RegisterDockerStats(server, testLogger(), diag)
 	RegisterDockerLogs(server, testLogger(), diag)
-	RegisterDockerRestart(server, testLogger(), diag)
+	RegisterDockerRestart(server, testLogger(), diag, audit.New(10))
+	RegisterDockerExec(server, testLogger(), diag)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	go func() { _, _ = server.Connect(ctx, serverTransport, nil) }()
@@ -201,6 +215,92 @@ func TestDockerRestart_RequiresConfirmation(t *testing.T) {
 	}
 }
 
+func TestDockerRestart_DryRun(t *testing.T) {
+	diag := &fakeDockerDiagnostics{}
+	session := newDockerSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "docker_restart",
+		Arguments: map[string]any{"server": "archive", "container": "web", "dry_run": true},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+	}
+	if diag.sawContainer != "" {
+		t.Error("expected Restart not to be called on a dry run")
+	}
+
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out DockerRestartOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.Status != "dry_run" {
+		t.Errorf("Status = %q, want dry_run", out.Status)
+	}
+	if !strings.Contains(out.Message, "docker restart web") {
+		t.Errorf("Message = %q, want it to mention the command", out.Message)
+	}
+}
+
+// TestDockerRestart_DryRunWinsOverConfirm proves dry_run short-circuits
+// even when confirm is also set — a dry run should never mutate anything,
+// regardless of what else the caller passed.
+func TestDockerRestart_DryRunWinsOverConfirm(t *testing.T) {
+	diag := &fakeDockerDiagnostics{}
+	session := newDockerSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "docker_restart",
+		Arguments: map[string]any{"server": "archive", "container": "web", "confirm": true, "dry_run": true},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+	}
+	if diag.sawContainer != "" {
+		t.Error("expected Restart not to be called when dry_run is set, even with confirm: true")
+	}
+}
+
+// TestDockerRestart_RecordsAuditEntry proves docker_restart's mutations
+// (and blocked attempts) are recorded via withAudit, end to end through
+// the real MCP protocol — not just that withAudit's unit logic works.
+func TestDockerRestart_RecordsAuditEntry(t *testing.T) {
+	diag := &fakeDockerDiagnostics{}
+	auditLog := audit.New(10)
+
+	ctx := context.Background()
+	server := mcp.NewServer(&mcp.Implementation{Name: "test-server", Version: "test"}, nil)
+	RegisterDockerRestart(server, testLogger(), diag, auditLog)
+
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	go func() { _, _ = server.Connect(ctx, serverTransport, nil) }()
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "test"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("connect failed: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	if _, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "docker_restart",
+		Arguments: map[string]any{"server": "archive", "container": "web", "confirm": true},
+	}); err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+
+	entries := auditLog.Recent()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 audit entry, got %+v", entries)
+	}
+	e := entries[0]
+	if e.Tool != "docker_restart" || e.Target != "archive" || e.Status != "restarted" {
+		t.Errorf("unexpected audit entry: %+v", e)
+	}
+}
+
 func TestDockerRestart_Confirmed(t *testing.T) {
 	diag := &fakeDockerDiagnostics{}
 	session := newDockerSession(t, diag)
@@ -241,6 +341,72 @@ func TestDockerRestart_ConfirmedButFails(t *testing.T) {
 	}
 	if !result.IsError {
 		t.Fatal("expected IsError=true for a failing restart")
+	}
+}
+
+func TestDockerExec_ViaMCPProtocol(t *testing.T) {
+	diag := &fakeDockerDiagnostics{execResult: docker.ExecResult{Stdout: "ok\n", ExitCode: 0}}
+	session := newDockerSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "docker_exec",
+		Arguments: map[string]any{"server": "archive", "container": "web", "command": "echo ok"},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+	}
+	if diag.sawContainer != "web" || diag.sawCommand != "echo ok" {
+		t.Errorf("unexpected call: container=%q command=%q", diag.sawContainer, diag.sawCommand)
+	}
+
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out DockerExecOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.Stdout != "ok\n" || out.ExitCode != 0 {
+		t.Errorf("unexpected output: %+v", out)
+	}
+}
+
+func TestDockerExec_NonZeroExitIsNotAnError(t *testing.T) {
+	diag := &fakeDockerDiagnostics{execResult: docker.ExecResult{Stderr: "not found\n", ExitCode: 1}}
+	session := newDockerSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "docker_exec",
+		Arguments: map[string]any{"server": "archive", "container": "web", "command": "false"},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("expected a non-zero exit to be reported as data, not a tool error: err=%v result=%+v", err, result)
+	}
+
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out DockerExecOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.ExitCode != 1 {
+		t.Errorf("ExitCode = %d, want 1", out.ExitCode)
+	}
+}
+
+func TestDockerExec_Error(t *testing.T) {
+	diag := &fakeDockerDiagnostics{execErr: errors.New("docker: no such container")}
+	session := newDockerSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "docker_exec",
+		Arguments: map[string]any{"server": "archive", "container": "web", "command": "echo hi"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool transport error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected IsError=true")
 	}
 }
 

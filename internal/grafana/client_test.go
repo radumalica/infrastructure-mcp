@@ -174,3 +174,49 @@ func TestDoRequest_BasicAuth(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// TestDoRequest_SelfSignedCert_RejectedByDefault proves the safe default:
+// a self-signed cert (the same shape a stock Proxmox/Grafana-behind-a-
+// homelab-reverse-proxy install ships) is rejected unless the instance
+// explicitly opts into InsecureSkipVerify. Uses a plain *http.Client, not
+// srv.Client() (which already trusts the test server's cert) — that
+// would defeat the point of this test.
+func TestDoRequest_SelfSignedCert_RejectedByDefault(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
+	}))
+	defer srv.Close()
+
+	c := New(fakeLookup{ep: inventory.ServiceEndpoint{URL: srv.URL}}, &http.Client{})
+	if _, err := c.ListAlerts(context.Background(), "main"); err == nil {
+		t.Fatal("expected a certificate verification error against a self-signed cert by default")
+	}
+}
+
+// TestDoRequest_InsecureSkipVerify proves the opt-in actually works, and
+// only for the instance that set it.
+func TestDoRequest_InsecureSkipVerify(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
+	}))
+	defer srv.Close()
+
+	c := New(fakeLookup{ep: inventory.ServiceEndpoint{URL: srv.URL, InsecureSkipVerify: true}}, &http.Client{})
+	if _, err := c.ListAlerts(context.Background(), "main"); err != nil {
+		t.Fatalf("unexpected error with InsecureSkipVerify set: %v", err)
+	}
+
+	// A second call for the same instance should reuse the cached
+	// insecure client, not rebuild one every request.
+	c.mu.Lock()
+	n := len(c.insecureClients)
+	c.mu.Unlock()
+	if _, err := c.ListAlerts(context.Background(), "main"); err != nil {
+		t.Fatalf("unexpected error on second call: %v", err)
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.insecureClients) != n {
+		t.Errorf("expected the insecure client cache to stay at %d entries, got %d", n, len(c.insecureClients))
+	}
+}

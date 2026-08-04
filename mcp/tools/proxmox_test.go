@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"infrastructure-mcp/internal/audit"
 	"infrastructure-mcp/internal/inventory"
 	"infrastructure-mcp/internal/proxmox"
 )
@@ -59,9 +61,9 @@ func newProxmoxSession(t *testing.T, diag *fakeProxmoxDiagnostics) *mcp.ClientSe
 	RegisterProxmoxNodes(server, testLogger(), diag)
 	RegisterProxmoxVMs(server, testLogger(), diag)
 	RegisterProxmoxTasks(server, testLogger(), diag)
-	RegisterProxmoxStartVM(server, testLogger(), diag)
-	RegisterProxmoxStopVM(server, testLogger(), diag)
-	RegisterProxmoxSnapshot(server, testLogger(), diag)
+	RegisterProxmoxStartVM(server, testLogger(), diag, audit.New(10))
+	RegisterProxmoxStopVM(server, testLogger(), diag, audit.New(10))
+	RegisterProxmoxSnapshot(server, testLogger(), diag, audit.New(10))
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	go func() { _, _ = server.Connect(ctx, serverTransport, nil) }()
@@ -175,6 +177,84 @@ func TestProxmoxStartVM_RequiresConfirm(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if out.Status != "confirmation_required" {
+		t.Errorf("unexpected output: %+v", out)
+	}
+}
+
+func TestProxmoxStartVM_DryRun(t *testing.T) {
+	diag := &fakeProxmoxDiagnostics{}
+	session := newProxmoxSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "proxmox_start_vm",
+		Arguments: map[string]any{"instance": "lab", "node": "pve01", "vmid": 100, "confirm": true, "dry_run": true},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+	}
+	if diag.startCnt != 0 {
+		t.Error("expected StartVM not to be called on a dry run, even with confirm: true")
+	}
+
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out ProxmoxStartVMOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.Status != "dry_run" || !strings.Contains(out.Message, "/nodes/pve01/qemu/100/status/start") {
+		t.Errorf("unexpected output: %+v", out)
+	}
+}
+
+func TestProxmoxStopVM_DryRun(t *testing.T) {
+	diag := &fakeProxmoxDiagnostics{}
+	session := newProxmoxSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "proxmox_stop_vm",
+		Arguments: map[string]any{"instance": "lab", "node": "pve01", "vmid": 100, "dry_run": true},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+	}
+	if diag.stopCnt != 0 {
+		t.Error("expected StopVM not to be called on a dry run")
+	}
+
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out ProxmoxStopVMOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.Status != "dry_run" || !strings.Contains(out.Message, "/nodes/pve01/qemu/100/status/stop") {
+		t.Errorf("unexpected output: %+v", out)
+	}
+}
+
+func TestProxmoxSnapshot_DryRun(t *testing.T) {
+	diag := &fakeProxmoxDiagnostics{}
+	session := newProxmoxSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "proxmox_snapshot",
+		Arguments: map[string]any{"instance": "lab", "node": "pve01", "vmid": 100, "type": "lxc", "name": "pre-upgrade", "dry_run": true},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+	}
+	if diag.sawSnap != "" {
+		t.Error("expected Snapshot not to be called on a dry run")
+	}
+
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out ProxmoxSnapshotOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.Status != "dry_run" || !strings.Contains(out.Message, "/nodes/pve01/lxc/100/snapshot") || !strings.Contains(out.Message, "pre-upgrade") {
 		t.Errorf("unexpected output: %+v", out)
 	}
 }

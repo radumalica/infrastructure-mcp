@@ -18,6 +18,10 @@ Conventions that apply across the whole tool surface (see
   `proxmox_start_vm`, `proxmox_stop_vm`, `proxmox_snapshot`) require
   `confirm: true`; without it they return `status: "confirmation_required"`
   and take no action. See [ADR 0007](adr/0007-structured-errors-and-confirm-gated-mutations.md).
+- Those same mutating tools also accept `dry_run: true`, which returns
+  `status: "dry_run"` and a `message` describing the exact command/API call
+  that would be made, taking no action — even if `confirm: true` is also
+  set. `dry_run` always wins over `confirm`.
 
 ---
 
@@ -35,6 +39,39 @@ Conventions that apply across the whole tool surface (see
     { "name": "archive", "hostname": "10.0.0.5", "tags": ["linux", "ethereum"] },
     { "name": "pve01", "hostname": "10.0.0.2", "tags": ["proxmox"] }
   ]
+}
+```
+
+### `check_inventory_health`
+
+Takes no arguments. Re-reads the inventory file from disk on every call
+(independent of what the running server currently has loaded), so it
+reflects drift since the server started — a rotated SSH key, an unset
+environment variable, a hand-edited file that would fail to reload.
+
+```json
+{
+  "status": "healthy",
+  "servers": 2,
+  "routers": 1,
+  "switches": 2,
+  "grafana": 1,
+  "proxmox": 1,
+  "kubernetes": 1,
+  "timestamp": "2026-08-03T09:00:00Z"
+}
+```
+
+Unhealthy — one or more problems, every one reported in the same call:
+
+```json
+{
+  "status": "unhealthy",
+  "problems": [
+    "server \"archive\" key \"~/.ssh/archive\": open /home/hermes/.ssh/archive: no such file or directory"
+  ],
+  "servers": 2,
+  "timestamp": "2026-08-03T09:00:00Z"
 }
 ```
 
@@ -291,6 +328,7 @@ Conventions that apply across the whole tool surface (see
 | `server` | yes | inventory server name |
 | `container` | yes | container name or ID |
 | `confirm` | yes to act | must be `true` to actually restart |
+| `dry_run` | no | see `dry_run` above — shows the command, takes no action |
 
 Unconfirmed call:
 
@@ -302,6 +340,20 @@ Confirmed call:
 
 ```json
 { "server": "archive", "container": "grafana", "status": "restarted", "message": "Container restarted.", "timestamp": "2026-07-30T09:00:00Z" }
+```
+
+### `docker_exec`
+
+Container-scoped equivalent of `run_command` — not confirm-gated, following `run_command`'s own convention rather than `docker_restart`'s. A non-zero `exit_code` is reported as data, not a tool error.
+
+| Param | Required | Description |
+|---|---|---|
+| `server` | yes | inventory server name |
+| `container` | yes | container name or ID |
+| `command` | yes | shell command to run inside the container |
+
+```json
+{ "server": "archive", "container": "grafana", "command": "cat /etc/grafana/grafana.ini | grep http_port", "stdout": "http_port = 3000\n", "stderr": "", "exit_code": 0, "timestamp": "2026-07-30T09:00:00Z" }
 ```
 
 ## Kubernetes
@@ -400,6 +452,22 @@ Confirmed call:
   ],
   "timestamp": "2026-07-30T09:00:00Z"
 }
+```
+
+### `kubectl_exec`
+
+Pod-scoped equivalent of `run_command`/`docker_exec` — not confirm-gated. A non-zero `exit_code` is reported as data, not a tool error.
+
+| Param | Required | Description |
+|---|---|---|
+| `cluster` | yes | inventory kubernetes cluster name |
+| `namespace` | yes | namespace the pod is in |
+| `pod` | yes | pod name |
+| `container` | no | container name (default: the pod's only/first container) |
+| `command` | yes | command and args, e.g. `["cat", "/etc/resolv.conf"]` |
+
+```json
+{ "cluster": "home", "namespace": "default", "pod": "app-1", "command": ["cat", "/etc/resolv.conf"], "stdout": "nameserver 10.43.0.10\n", "stderr": "", "exit_code": 0, "timestamp": "2026-07-30T09:00:00Z" }
 ```
 
 ## Grafana
@@ -541,6 +609,7 @@ not normalized — read it according to the datasource you queried.
 | `vmid` | yes | numeric VM/container ID |
 | `type` | no | `qemu` (default) or `lxc` |
 | `confirm` | yes to act | must be `true` |
+| `dry_run` | no | see `dry_run` above — shows the API call, takes no action |
 
 Confirmed call — starting is asynchronous, check the returned `upid` with `proxmox_tasks`:
 
@@ -631,9 +700,66 @@ Same params as `proxmox_start_vm` plus `name` (snapshot name, required).
 |---|---|---|
 | `device` | yes | inventory router/switch name |
 
-Returns the running-config text as-is (`config` field), single command with
-no session setup — if the device paginates output, only the first page
-comes back. Not shown here for brevity; see `cisco_backup.go`.
+Returns the running-config text as-is (`config` field). Not shown here for
+brevity; see `cisco_backup.go`.
+
+Pagination: Telnet-connected devices get `terminal length 0` sent
+automatically first (Telnet sessions are persistent, so this actually takes
+effect); SSH-connected devices do not, since SSH runs one command per
+ephemeral exec channel and pagination settings don't carry over between
+calls — if an SSH-connected device's default page length isn't already
+unlimited, only the first `--More--` page comes back. Configure
+`terminal length 0` on the device itself for SSH-reached targets.
+
+### `cisco_backup_diff`
+
+| Param | Required | Description |
+|---|---|---|
+| `device` | yes | inventory router/switch name |
+
+Fetches the current running-config (same call as `cisco_backup`) and diffs it against the last snapshot this tool took for the same device, persisted under `-backup-dir` (default `configs/backups`, one file per device, one snapshot — not a rotating history). The first call for a device has nothing to diff against yet.
+
+First call for a device:
+
+```json
+{ "device": "core-sw", "changed": false, "first_snapshot": true, "timestamp": "2026-07-30T09:00:00Z" }
+```
+
+A later call after the config changed:
+
+```json
+{
+  "device": "core-sw",
+  "changed": true,
+  "first_snapshot": false,
+  "diff": "--- previous\n+++ current\n@@ -1,3 +1,3 @@\n hostname router1\n-interface Gi0/1\n+interface Gi0/2\n !\n",
+  "timestamp": "2026-07-30T09:05:00Z"
+}
+```
+
+---
+
+## Resources
+
+Resources are read-only, URI-addressed data an agent can fetch directly,
+distinct from tools (which are invoked with arguments). Registered in
+`mcp/resources/`.
+
+### `audit://recent`
+
+The most recent mutating tool invocations (`docker_restart`,
+`proxmox_start_vm`, `proxmox_stop_vm`, `proxmox_snapshot`) this server has
+handled, newest first — including blocked attempts (`confirmation_required`,
+`dry_run`), not just ones that actually mutated something. In-memory only
+(`-audit-history-size`, default 200 entries); cleared on restart. Not a
+durable audit trail — see `internal/audit`'s package doc for why.
+
+```json
+[
+  { "timestamp": "2026-08-03T10:05:00Z", "tool": "docker_restart", "target": "archive", "user": "claude-code", "status": "restarted" },
+  { "timestamp": "2026-08-03T10:04:12Z", "tool": "proxmox_snapshot", "target": "lab", "user": "claude-code", "status": "confirmation_required" }
+]
+```
 
 ---
 

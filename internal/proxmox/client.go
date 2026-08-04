@@ -2,6 +2,7 @@ package proxmox
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"infrastructure-mcp/internal/inventory"
@@ -40,6 +42,9 @@ type EndpointLookup interface {
 type Client struct {
 	inv        EndpointLookup
 	httpClient *http.Client
+
+	mu              sync.Mutex
+	insecureClients map[string]*http.Client
 }
 
 // New creates a Client that resolves cluster names against inv, using
@@ -49,7 +54,33 @@ func New(inv EndpointLookup, httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 15 * time.Second}
 	}
-	return &Client{inv: inv, httpClient: httpClient}
+	return &Client{inv: inv, httpClient: httpClient, insecureClients: make(map[string]*http.Client)}
+}
+
+// httpClientFor returns the Client's normal shared http.Client, unless
+// instance's inventory entry opts into InsecureSkipVerify — a stock
+// Proxmox install's self-signed :8006 certificate being the motivating
+// case, see the "Known limitation" note in this package's PROGRESS.md
+// history — in which case it returns a dedicated client (built once,
+// cached) with TLS certificate verification disabled for that one
+// instance only.
+func (c *Client) httpClientFor(instance string, ep inventory.ServiceEndpoint) *http.Client {
+	if !ep.InsecureSkipVerify {
+		return c.httpClient
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if cl, ok := c.insecureClients[instance]; ok {
+		return cl
+	}
+
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	cl := &http.Client{Timeout: c.httpClient.Timeout, Transport: transport}
+	c.insecureClients[instance] = cl
+	return cl
 }
 
 func (c *Client) doRequest(ctx context.Context, instance, method, path string, query url.Values, form url.Values) ([]byte, error) {
@@ -81,7 +112,7 @@ func (c *Client) doRequest(ctx context.Context, instance, method, path string, q
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClientFor(instance, ep).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("proxmox: request to instance %q: %w", instance, err)
 	}

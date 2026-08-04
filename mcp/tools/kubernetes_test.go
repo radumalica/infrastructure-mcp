@@ -18,11 +18,14 @@ type fakeKubeDiagnostics struct {
 	events  []kubernetes.EventEntry
 	desc    kubernetes.PodDescription
 	nodes   []kubernetes.NodeEntry
+	exec    kubernetes.ExecResult
+	execErr error
 	err     error
 	sawNS   string
 	sawPod  string
 	sawTail int64
 	sawClu  string
+	sawCmd  []string
 }
 
 func (f *fakeKubeDiagnostics) ListPods(_ context.Context, cluster, namespace string) ([]kubernetes.PodEntry, error) {
@@ -45,6 +48,16 @@ func (f *fakeKubeDiagnostics) ListNodes(_ context.Context, cluster string) ([]ku
 	f.sawClu = cluster
 	return f.nodes, f.err
 }
+func (f *fakeKubeDiagnostics) Exec(_ context.Context, cluster, namespace, pod, _ string, command []string) (kubernetes.ExecResult, error) {
+	f.sawClu, f.sawNS, f.sawPod, f.sawCmd = cluster, namespace, pod, command
+	if f.execErr != nil {
+		return kubernetes.ExecResult{}, f.execErr
+	}
+	if f.err != nil {
+		return kubernetes.ExecResult{}, f.err
+	}
+	return f.exec, nil
+}
 
 func newKubeSession(t *testing.T, diag *fakeKubeDiagnostics) *mcp.ClientSession {
 	t.Helper()
@@ -56,6 +69,7 @@ func newKubeSession(t *testing.T, diag *fakeKubeDiagnostics) *mcp.ClientSession 
 	RegisterKubectlEvents(server, testLogger(), diag)
 	RegisterKubectlDescribe(server, testLogger(), diag)
 	RegisterKubectlNodes(server, testLogger(), diag)
+	RegisterKubectlExec(server, testLogger(), diag)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	go func() { _, _ = server.Connect(ctx, serverTransport, nil) }()
@@ -209,6 +223,55 @@ func TestKubectlNodes_ViaMCPProtocol(t *testing.T) {
 	}
 }
 
+func TestKubectlExec_ViaMCPProtocol(t *testing.T) {
+	diag := &fakeKubeDiagnostics{exec: kubernetes.ExecResult{Stdout: "hi\n", ExitCode: 0}}
+	session := newKubeSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "kubectl_exec",
+		Arguments: map[string]any{"cluster": "home", "namespace": "default", "pod": "app-1", "command": []string{"echo", "hi"}},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+	}
+	if diag.sawPod != "app-1" || len(diag.sawCmd) != 2 || diag.sawCmd[0] != "echo" {
+		t.Errorf("unexpected call: pod=%q command=%v", diag.sawPod, diag.sawCmd)
+	}
+
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out KubectlExecOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.Stdout != "hi\n" || out.ExitCode != 0 {
+		t.Errorf("unexpected output: %+v", out)
+	}
+}
+
+func TestKubectlExec_NonZeroExitIsNotAnError(t *testing.T) {
+	diag := &fakeKubeDiagnostics{exec: kubernetes.ExecResult{Stderr: "not found\n", ExitCode: 1}}
+	session := newKubeSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "kubectl_exec",
+		Arguments: map[string]any{"cluster": "home", "namespace": "default", "pod": "app-1", "command": []string{"false"}},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("expected a non-zero exit to be reported as data, not a tool error: err=%v result=%+v", err, result)
+	}
+
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out KubectlExecOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.ExitCode != 1 {
+		t.Errorf("ExitCode = %d, want 1", out.ExitCode)
+	}
+}
+
 func TestKubernetesTools_ErrorPath(t *testing.T) {
 	diag := &fakeKubeDiagnostics{err: errors.New("boom")}
 	session := newKubeSession(t, diag)
@@ -223,6 +286,7 @@ func TestKubernetesTools_ErrorPath(t *testing.T) {
 		{"kubectl_events", map[string]any{"cluster": "home"}},
 		{"kubectl_describe", map[string]any{"cluster": "home", "namespace": "default", "pod": "app-1"}},
 		{"kubectl_nodes", map[string]any{"cluster": "home"}},
+		{"kubectl_exec", map[string]any{"cluster": "home", "namespace": "default", "pod": "app-1", "command": []string{"echo", "hi"}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.tool, func(t *testing.T) {
