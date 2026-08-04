@@ -60,6 +60,13 @@ linters:
         linters:
           - gosec
         text: "G304"
+      # SSH key / kubeconfig paths come from the already-validated
+      # inventory file itself — same operator-controlled-config posture
+      # as internal/inventory/loader.go and internal/ssh/auth.go above.
+      - path: mcp/tools/check_inventory_health\.go
+        linters:
+          - gosec
+        text: "G304"
 
 formatters:
   enable:

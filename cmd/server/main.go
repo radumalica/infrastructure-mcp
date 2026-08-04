@@ -106,6 +106,7 @@ func run() error {
 	}, nil)
 
 	tools.RegisterListServers(server, logger, inv)
+	tools.RegisterCheckInventoryHealth(server, logger, *inventoryPath)
 	tools.RegisterRunCommand(server, logger, remotePool)
 	tools.RegisterUptime(server, logger, linuxClient)
 	tools.RegisterDiskUsage(server, logger, linuxClient)

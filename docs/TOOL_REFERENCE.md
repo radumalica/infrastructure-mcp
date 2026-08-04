@@ -42,6 +42,39 @@ Conventions that apply across the whole tool surface (see
 }
 ```
 
+### `check_inventory_health`
+
+Takes no arguments. Re-reads the inventory file from disk on every call
+(independent of what the running server currently has loaded), so it
+reflects drift since the server started — a rotated SSH key, an unset
+environment variable, a hand-edited file that would fail to reload.
+
+```json
+{
+  "status": "healthy",
+  "servers": 2,
+  "routers": 1,
+  "switches": 2,
+  "grafana": 1,
+  "proxmox": 1,
+  "kubernetes": 1,
+  "timestamp": "2026-08-03T09:00:00Z"
+}
+```
+
+Unhealthy — one or more problems, every one reported in the same call:
+
+```json
+{
+  "status": "unhealthy",
+  "problems": [
+    "server \"archive\" key \"~/.ssh/archive\": open /home/hermes/.ssh/archive: no such file or directory"
+  ],
+  "servers": 2,
+  "timestamp": "2026-08-03T09:00:00Z"
+}
+```
+
 ### `run_command`
 
 | Param | Required | Description |

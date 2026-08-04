@@ -81,6 +81,7 @@ Tools implemented and tested against the real MCP protocol so far:
 
 **Core (v0.1)**
 - `list_servers` — list inventory targets, optionally filtered by tag
+- `check_inventory_health` — validate the inventory file: parses, every `${VAR}` is set, every SSH key/kubeconfig file it references is readable
 - `run_command` — run an arbitrary command against an inventory target
 - `uptime` — uptime and load averages
 - `disk_usage` — per-filesystem usage with warning/critical severity

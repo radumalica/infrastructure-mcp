@@ -37,7 +37,7 @@ This file is the single progress log — updated after each completed feature, w
 | operator-features | `dry_run` convention on mutating tools | done |
 | operator-features | Audit history MCP resource | done |
 | operator-features | `diagnose_docker()` composite tool | not started |
-| operator-features | `check_inventory_health()` tool | not started |
+| operator-features | `check_inventory_health()` tool | done |
 | operator-features | `notify` webhook tool | not started |
 | operator-features | Prometheus/Loki query tools | not started |
 | operator-features | Alertmanager silence tools | not started |
@@ -320,6 +320,17 @@ Adds `internal/audit` (a small, fixed-capacity, in-memory ring buffer of `Entry{
 - **Blocked attempts are recorded too, not just successful mutations** — a `confirmation_required` or `dry_run` entry is still useful audit signal ("an agent tried to restart this and was blocked"), and dropping them would make the log look emptier than the actual attempted-action history.
 - **`-audit-history-size` flag** (default 200) controls ring buffer capacity; `audit.New` floors capacity at 1 to avoid a modulo-by-zero panic on a misconfigured `0`.
 - Tests: `internal/audit` has a full unit suite including a concurrent-`Record` race test (100 goroutines) — 100% coverage. `mcp/resources` has protocol-level tests via `mcp.NewInMemoryTransports` (empty log, newest-first ordering). `mcp/tools` has one end-to-end test (`TestDockerRestart_RecordsAuditEntry`) proving a real tool call through the MCP protocol actually reaches the shared `audit.Log`, not just that `withAudit`'s logic works in isolation.
+- Full local gate green: `gofmt`, `go build`, `go vet`, `go test ./... -race -cover`, `golangci-lint run ./...` (0 issues).
+
+### 2026-08-03 — operator-features: `check_inventory_health` tool
+
+Adds a no-argument, read-only tool validating the inventory file itself, distinct from every other tool (which validates one target's reachability at call time).
+
+- **Discovered while designing this that `inventory.Load` already fails the whole server startup on any missing `${VAR}`** (see `internal/inventory/expand.go`'s `expandEnv`) — so "check every referenced env var is set" against the *already-loaded, in-memory* inventory would be a no-op: if the server is running at all, every env var it started with was set. Re-scoped the tool to **re-read and re-parse the inventory file from disk on every call** instead of reusing the shared `*inventory.Inventory` every other tool gets — this is what makes the tool actually useful: it catches drift since the server started (an env var later unset from the environment, a config file hand-edited but not yet reloaded, a key file rotated out from under a still-valid-looking path), not just a redundant re-check of what's already known to be fine.
+- **SSH key and kubeconfig file readability aren't covered by `inventory.Validate()`** (which only checks struct-level required-field/format rules, e.g. `Key string` has no `validate` tag at all) — this tool is the first thing in the codebase that actually opens those files to confirm they're readable, mirroring `internal/ssh/auth.go`'s own `expandHome`+`os.ReadFile` sequence (duplicated as a 6-line unexported helper here rather than exporting `internal/ssh`'s version, since the two packages have no other reason to depend on each other).
+- **Reports every problem found in one pass**, not just the first — `Problems []string` accumulates across every server/router/switch/kubernetes entry, so an operator fixing a broken inventory doesn't have to fix-and-rerun once per problem.
+- `.golangci.yml` gained one more narrow G304 exclusion (`mcp/tools/check_inventory_health.go`), same operator-controlled-config-path precedent as `internal/inventory/loader.go`/`internal/ssh/auth.go`/`internal/backupstore/store.go` above.
+- Tests: healthy case, missing env var, unreadable SSH key, unreadable kubeconfig, malformed YAML, and missing inventory file — all via the real MCP protocol against real temp files (`t.TempDir()`), not mocks.
 - Full local gate green: `gofmt`, `go build`, `go vet`, `go test ./... -race -cover`, `golangci-lint run ./...` (0 issues).
 
 ## Decisions & Deviations from a literal README reading
