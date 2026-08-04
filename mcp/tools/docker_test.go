@@ -9,6 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"infrastructure-mcp/internal/audit"
 	"infrastructure-mcp/internal/docker"
 	"infrastructure-mcp/internal/ssh"
 )
@@ -69,7 +70,7 @@ func newDockerSession(t *testing.T, diag *fakeDockerDiagnostics) *mcp.ClientSess
 	RegisterDockerImages(server, testLogger(), diag)
 	RegisterDockerStats(server, testLogger(), diag)
 	RegisterDockerLogs(server, testLogger(), diag)
-	RegisterDockerRestart(server, testLogger(), diag)
+	RegisterDockerRestart(server, testLogger(), diag, audit.New(10))
 	RegisterDockerExec(server, testLogger(), diag)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
@@ -260,6 +261,43 @@ func TestDockerRestart_DryRunWinsOverConfirm(t *testing.T) {
 	}
 	if diag.sawContainer != "" {
 		t.Error("expected Restart not to be called when dry_run is set, even with confirm: true")
+	}
+}
+
+// TestDockerRestart_RecordsAuditEntry proves docker_restart's mutations
+// (and blocked attempts) are recorded via withAudit, end to end through
+// the real MCP protocol — not just that withAudit's unit logic works.
+func TestDockerRestart_RecordsAuditEntry(t *testing.T) {
+	diag := &fakeDockerDiagnostics{}
+	auditLog := audit.New(10)
+
+	ctx := context.Background()
+	server := mcp.NewServer(&mcp.Implementation{Name: "test-server", Version: "test"}, nil)
+	RegisterDockerRestart(server, testLogger(), diag, auditLog)
+
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	go func() { _, _ = server.Connect(ctx, serverTransport, nil) }()
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "test"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("connect failed: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	if _, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "docker_restart",
+		Arguments: map[string]any{"server": "archive", "container": "web", "confirm": true},
+	}); err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+
+	entries := auditLog.Recent()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 audit entry, got %+v", entries)
+	}
+	e := entries[0]
+	if e.Tool != "docker_restart" || e.Target != "archive" || e.Status != "restarted" {
+		t.Errorf("unexpected audit entry: %+v", e)
 	}
 }
 

@@ -35,7 +35,7 @@ This file is the single progress log — updated after each completed feature, w
 | operator-features | `cisco_backup_diff` — config drift detection | done |
 | operator-features | `insecure_skip_verify` per-instance TLS opt-in (Grafana/Proxmox) | done |
 | operator-features | `dry_run` convention on mutating tools | done |
-| operator-features | Audit history MCP resource | not started |
+| operator-features | Audit history MCP resource | done |
 | operator-features | `diagnose_docker()` composite tool | not started |
 | operator-features | `check_inventory_health()` tool | not started |
 | operator-features | `notify` webhook tool | not started |
@@ -308,6 +308,18 @@ Adds `dry_run bool` to the four existing confirm-gated mutating tools (`docker_r
 - **The `dry_run` response is more specific than `confirmation_required`**: `confirmation_required`'s `message` is a generic "set confirm: true" prompt; `dry_run`'s `message` names the actual command/API call — `docker restart <container>` for `docker_restart`, and `POST /nodes/<node>/<type>/<vmid>/status/start` (etc., including the `snapname` form value for `proxmox_snapshot`) for the Proxmox tools, mirroring `internal/proxmox.guestPath`'s own path shape without importing the unexported helper.
 - `status: "dry_run"` is a new, distinct output value from `confirmation_required` on all four tools' existing output structs — no new fields needed there since `Message` already existed.
 - Tests: for each of the four tools, one case proving no adapter call happens on a dry run, and (for `docker_restart`) one explicit case proving `dry_run: true` wins even when `confirm: true` is also set.
+- Full local gate green: `gofmt`, `go build`, `go vet`, `go test ./... -race -cover`, `golangci-lint run ./...` (0 issues).
+
+### 2026-08-03 — operator-features: audit history MCP resource (`audit://recent`)
+
+Adds `internal/audit` (a small, fixed-capacity, in-memory ring buffer of `Entry{Timestamp, Tool, Target, User, Status}`) and `mcp/resources` — this project's **first MCP resource**, as opposed to tool. Lets an agent check "what destructive/state-changing actions has this server already taken this session" (e.g. "did I already restart this container?") before proposing another one.
+
+- **`mcp/resources` is a new top-level package**, mirroring `mcp/tools`'s existing shape (one file per resource, registered from `cmd/server/main.go`) — establishes the pattern for any future resource rather than bolting this one resource onto `mcp/tools`.
+- **Only the four existing confirm-gated mutating tools record to the audit log** (`docker_restart`, `proxmox_start_vm`, `proxmox_stop_vm`, `proxmox_snapshot`) — read-only tools produce no audit-worthy state change, so recording every tool call would just be a duplicate, unbounded version of the existing structured `slog` output for no operator benefit.
+- **`withAudit[In Targeted, Out auditable]` is a new generic decorator in `mcp/tools/logging.go`**, composing with the existing `withLogging` decorator (`withAudit(auditLog, name, withLogging(logger, name, handler))`) rather than folding audit recording into `withLogging` itself — audit and structured logging are separate concerns with separate consumers (an agent reading a resource vs. an operator's log aggregator), and only 4 of ~30 tools need the former. Each of the four output structs (`DockerRestartOutput`, `ProxmoxStartVMOutput`, `ProxmoxStopVMOutput`, `ProxmoxSnapshotOutput`) gained a one-line `auditStatus() string` method (implementing the new `auditable` interface) rather than reflection, keeping the decorator generic without runtime field lookups.
+- **Blocked attempts are recorded too, not just successful mutations** — a `confirmation_required` or `dry_run` entry is still useful audit signal ("an agent tried to restart this and was blocked"), and dropping them would make the log look emptier than the actual attempted-action history.
+- **`-audit-history-size` flag** (default 200) controls ring buffer capacity; `audit.New` floors capacity at 1 to avoid a modulo-by-zero panic on a misconfigured `0`.
+- Tests: `internal/audit` has a full unit suite including a concurrent-`Record` race test (100 goroutines) — 100% coverage. `mcp/resources` has protocol-level tests via `mcp.NewInMemoryTransports` (empty log, newest-first ordering). `mcp/tools` has one end-to-end test (`TestDockerRestart_RecordsAuditEntry`) proving a real tool call through the MCP protocol actually reaches the shared `audit.Log`, not just that `withAudit`'s logic works in isolation.
 - Full local gate green: `gofmt`, `go build`, `go vet`, `go test ./... -race -cover`, `golangci-lint run ./...` (0 issues).
 
 ## Decisions & Deviations from a literal README reading

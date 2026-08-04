@@ -706,6 +706,30 @@ A later call after the config changed:
 
 ---
 
+## Resources
+
+Resources are read-only, URI-addressed data an agent can fetch directly,
+distinct from tools (which are invoked with arguments). Registered in
+`mcp/resources/`.
+
+### `audit://recent`
+
+The most recent mutating tool invocations (`docker_restart`,
+`proxmox_start_vm`, `proxmox_stop_vm`, `proxmox_snapshot`) this server has
+handled, newest first — including blocked attempts (`confirmation_required`,
+`dry_run`), not just ones that actually mutated something. In-memory only
+(`-audit-history-size`, default 200 entries); cleared on restart. Not a
+durable audit trail — see `internal/audit`'s package doc for why.
+
+```json
+[
+  { "timestamp": "2026-08-03T10:05:00Z", "tool": "docker_restart", "target": "archive", "user": "claude-code", "status": "restarted" },
+  { "timestamp": "2026-08-03T10:04:12Z", "tool": "proxmox_snapshot", "target": "lab", "user": "claude-code", "status": "confirmation_required" }
+]
+```
+
+---
+
 See [Examples](../README.md#examples) in the README for full request/response
 walkthroughs, and [`examples/`](../examples/) for runnable inventory
 snippets and MCP client configs.

@@ -21,6 +21,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"infrastructure-mcp/internal/audit"
 	"infrastructure-mcp/internal/backupstore"
 	"infrastructure-mcp/internal/cisco"
 	"infrastructure-mcp/internal/docker"
@@ -32,6 +33,7 @@ import (
 	"infrastructure-mcp/internal/remote"
 	"infrastructure-mcp/internal/ssh"
 	"infrastructure-mcp/internal/telnet"
+	"infrastructure-mcp/mcp/resources"
 	"infrastructure-mcp/mcp/tools"
 )
 
@@ -54,6 +56,7 @@ func run() error {
 	healthcheckURL := flag.String("healthcheck-url", "http://127.0.0.1:8080/healthz", "URL checked when -healthcheck is set")
 	allowAnonymousHTTP := flag.Bool("allow-anonymous-http", false, "allow -transport=http to serve without a bearer token (lab/dev only — every tool, including run_command, becomes reachable to anyone who can reach the port)")
 	backupDir := flag.String("backup-dir", "configs/backups", "directory cisco_backup_diff persists its per-device config snapshots in (created on first use)")
+	auditHistorySize := flag.Int("audit-history-size", 200, "number of recent mutating tool invocations retained in-memory and exposed via the audit://recent resource")
 	flag.Parse()
 
 	if *healthcheck {
@@ -95,6 +98,7 @@ func run() error {
 	grafanaClient := grafana.New(inv, nil)
 	proxmoxClient := proxmox.New(inv, nil)
 	ciscoClient := cisco.New(remotePool, inv)
+	auditLog := audit.New(*auditHistorySize)
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "infrastructure-mcp",
@@ -116,7 +120,7 @@ func run() error {
 	tools.RegisterDockerImages(server, logger, dockerClient)
 	tools.RegisterDockerStats(server, logger, dockerClient)
 	tools.RegisterDockerLogs(server, logger, dockerClient)
-	tools.RegisterDockerRestart(server, logger, dockerClient)
+	tools.RegisterDockerRestart(server, logger, dockerClient, auditLog)
 	tools.RegisterDockerExec(server, logger, dockerClient)
 	tools.RegisterKubectlGetPods(server, logger, kubeClient)
 	tools.RegisterKubectlLogs(server, logger, kubeClient)
@@ -131,15 +135,17 @@ func run() error {
 	tools.RegisterProxmoxNodes(server, logger, proxmoxClient)
 	tools.RegisterProxmoxVMs(server, logger, proxmoxClient)
 	tools.RegisterProxmoxTasks(server, logger, proxmoxClient)
-	tools.RegisterProxmoxStartVM(server, logger, proxmoxClient)
-	tools.RegisterProxmoxStopVM(server, logger, proxmoxClient)
-	tools.RegisterProxmoxSnapshot(server, logger, proxmoxClient)
+	tools.RegisterProxmoxStartVM(server, logger, proxmoxClient, auditLog)
+	tools.RegisterProxmoxStopVM(server, logger, proxmoxClient, auditLog)
+	tools.RegisterProxmoxSnapshot(server, logger, proxmoxClient, auditLog)
 	tools.RegisterCiscoBackup(server, logger, ciscoClient)
 	tools.RegisterCiscoVersion(server, logger, ciscoClient)
 	tools.RegisterCiscoInterfaces(server, logger, ciscoClient)
 	tools.RegisterCiscoInventory(server, logger, ciscoClient)
 	tools.RegisterCiscoLogs(server, logger, ciscoClient)
 	tools.RegisterCiscoBackupDiff(server, logger, ciscoClient, backupstore.New(*backupDir))
+
+	resources.RegisterAuditHistory(server, auditLog)
 
 	switch *transportKind {
 	case "stdio":

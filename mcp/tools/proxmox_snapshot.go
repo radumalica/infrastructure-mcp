@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"infrastructure-mcp/internal/audit"
 )
 
 // ProxmoxSnapshotInput targets a single guest on a single Proxmox node.
@@ -49,12 +51,15 @@ type ProxmoxSnapshotOutput struct {
 	Timestamp string `json:"timestamp"`
 }
 
+// auditStatus implements auditable.
+func (o ProxmoxSnapshotOutput) auditStatus() string { return o.Status }
+
 // RegisterProxmoxSnapshot adds the proxmox_snapshot tool to server.
-func RegisterProxmoxSnapshot(server *mcp.Server, logger *slog.Logger, diag ProxmoxDiagnostics) {
+func RegisterProxmoxSnapshot(server *mcp.Server, logger *slog.Logger, diag ProxmoxDiagnostics, auditLog *audit.Log) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "proxmox_snapshot",
 		Description: "Take a snapshot of a QEMU VM or LXC container on a Proxmox node. This is a state-changing action: it requires `confirm: true`, and returns without acting if confirmation is missing. Snapshotting is asynchronous — the response carries a task UPID, not confirmation the snapshot has finished; check it with proxmox_tasks. Set `dry_run: true` to see the exact API call that would be made without needing confirm at all.",
-	}, withLogging(logger, "proxmox_snapshot", func(ctx context.Context, req *mcp.CallToolRequest, in ProxmoxSnapshotInput) (*mcp.CallToolResult, ProxmoxSnapshotOutput, error) {
+	}, withAudit(auditLog, "proxmox_snapshot", withLogging(logger, "proxmox_snapshot", func(ctx context.Context, req *mcp.CallToolRequest, in ProxmoxSnapshotInput) (*mcp.CallToolResult, ProxmoxSnapshotOutput, error) {
 		guestType := in.guestType()
 
 		if in.DryRun {
@@ -99,5 +104,5 @@ func RegisterProxmoxSnapshot(server *mcp.Server, logger *slog.Logger, diag Proxm
 			Message:   "Snapshot requested; check proxmox_tasks with this UPID for the outcome.",
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 		}, nil
-	}))
+	})))
 }

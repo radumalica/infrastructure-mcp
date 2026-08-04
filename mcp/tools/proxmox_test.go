@@ -9,6 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"infrastructure-mcp/internal/audit"
 	"infrastructure-mcp/internal/inventory"
 	"infrastructure-mcp/internal/proxmox"
 )
@@ -60,9 +61,9 @@ func newProxmoxSession(t *testing.T, diag *fakeProxmoxDiagnostics) *mcp.ClientSe
 	RegisterProxmoxNodes(server, testLogger(), diag)
 	RegisterProxmoxVMs(server, testLogger(), diag)
 	RegisterProxmoxTasks(server, testLogger(), diag)
-	RegisterProxmoxStartVM(server, testLogger(), diag)
-	RegisterProxmoxStopVM(server, testLogger(), diag)
-	RegisterProxmoxSnapshot(server, testLogger(), diag)
+	RegisterProxmoxStartVM(server, testLogger(), diag, audit.New(10))
+	RegisterProxmoxStopVM(server, testLogger(), diag, audit.New(10))
+	RegisterProxmoxSnapshot(server, testLogger(), diag, audit.New(10))
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	go func() { _, _ = server.Connect(ctx, serverTransport, nil) }()

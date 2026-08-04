@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"infrastructure-mcp/internal/audit"
 )
 
 // ProxmoxStartVMInput targets a single guest on a single Proxmox node.
@@ -47,12 +49,15 @@ type ProxmoxStartVMOutput struct {
 	Timestamp string `json:"timestamp"`
 }
 
+// auditStatus implements auditable.
+func (o ProxmoxStartVMOutput) auditStatus() string { return o.Status }
+
 // RegisterProxmoxStartVM adds the proxmox_start_vm tool to server.
-func RegisterProxmoxStartVM(server *mcp.Server, logger *slog.Logger, diag ProxmoxDiagnostics) {
+func RegisterProxmoxStartVM(server *mcp.Server, logger *slog.Logger, diag ProxmoxDiagnostics, auditLog *audit.Log) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "proxmox_start_vm",
 		Description: "Start a QEMU VM or LXC container on a Proxmox node. This is a state-changing action: it requires `confirm: true`, and returns without acting if confirmation is missing. Starting is asynchronous — the response carries a task UPID, not confirmation the guest has finished starting; check it with proxmox_tasks. Set `dry_run: true` to see the exact API call that would be made without needing confirm at all.",
-	}, withLogging(logger, "proxmox_start_vm", func(ctx context.Context, req *mcp.CallToolRequest, in ProxmoxStartVMInput) (*mcp.CallToolResult, ProxmoxStartVMOutput, error) {
+	}, withAudit(auditLog, "proxmox_start_vm", withLogging(logger, "proxmox_start_vm", func(ctx context.Context, req *mcp.CallToolRequest, in ProxmoxStartVMInput) (*mcp.CallToolResult, ProxmoxStartVMOutput, error) {
 		guestType := in.guestType()
 
 		if in.DryRun {
@@ -94,5 +99,5 @@ func RegisterProxmoxStartVM(server *mcp.Server, logger *slog.Logger, diag Proxmo
 			Message:   "Start requested; check proxmox_tasks with this UPID for the outcome.",
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 		}, nil
-	}))
+	})))
 }

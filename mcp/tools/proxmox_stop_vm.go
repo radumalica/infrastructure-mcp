@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"infrastructure-mcp/internal/audit"
 )
 
 // ProxmoxStopVMInput targets a single guest on a single Proxmox node.
@@ -47,12 +49,15 @@ type ProxmoxStopVMOutput struct {
 	Timestamp string `json:"timestamp"`
 }
 
+// auditStatus implements auditable.
+func (o ProxmoxStopVMOutput) auditStatus() string { return o.Status }
+
 // RegisterProxmoxStopVM adds the proxmox_stop_vm tool to server.
-func RegisterProxmoxStopVM(server *mcp.Server, logger *slog.Logger, diag ProxmoxDiagnostics) {
+func RegisterProxmoxStopVM(server *mcp.Server, logger *slog.Logger, diag ProxmoxDiagnostics, auditLog *audit.Log) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "proxmox_stop_vm",
 		Description: "Force-stop (hard power-off, not a graceful shutdown) a QEMU VM or LXC container on a Proxmox node. This is a dangerous, service-impacting action: it requires `confirm: true`, and returns without acting if confirmation is missing. Stopping is asynchronous — the response carries a task UPID, not confirmation the guest has finished stopping; check it with proxmox_tasks. Set `dry_run: true` to see the exact API call that would be made without needing confirm at all.",
-	}, withLogging(logger, "proxmox_stop_vm", func(ctx context.Context, req *mcp.CallToolRequest, in ProxmoxStopVMInput) (*mcp.CallToolResult, ProxmoxStopVMOutput, error) {
+	}, withAudit(auditLog, "proxmox_stop_vm", withLogging(logger, "proxmox_stop_vm", func(ctx context.Context, req *mcp.CallToolRequest, in ProxmoxStopVMInput) (*mcp.CallToolResult, ProxmoxStopVMOutput, error) {
 		guestType := in.guestType()
 
 		if in.DryRun {
@@ -94,5 +99,5 @@ func RegisterProxmoxStopVM(server *mcp.Server, logger *slog.Logger, diag Proxmox
 			Message:   "Stop requested; check proxmox_tasks with this UPID for the outcome.",
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 		}, nil
-	}))
+	})))
 }
