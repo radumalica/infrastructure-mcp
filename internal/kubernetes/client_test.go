@@ -236,7 +236,7 @@ func TestExec(t *testing.T) {
 	c := testClientWithConfig(cs)
 	var gotMethod string
 	var gotPath string
-	c.stream = func(_ *rest.Config, method string, u *neturl.URL, _ io.Reader) (string, string, int, error) {
+	c.stream = func(_ context.Context, _ *rest.Config, method string, u *neturl.URL, _ io.Reader) (string, string, int, error) {
 		gotMethod = method
 		gotPath = u.Path
 		return "hi\n", "", 0, nil
@@ -259,7 +259,7 @@ func TestExec(t *testing.T) {
 
 func TestExec_NonZeroExitIsNotAnError(t *testing.T) {
 	c := testClientWithConfig(k8sfake.NewSimpleClientset())
-	c.stream = func(*rest.Config, string, *neturl.URL, io.Reader) (string, string, int, error) {
+	c.stream = func(context.Context, *rest.Config, string, *neturl.URL, io.Reader) (string, string, int, error) {
 		return "", "boom\n", 1, nil
 	}
 
@@ -274,7 +274,7 @@ func TestExec_NonZeroExitIsNotAnError(t *testing.T) {
 
 func TestExec_StreamError(t *testing.T) {
 	c := testClientWithConfig(k8sfake.NewSimpleClientset())
-	c.stream = func(*rest.Config, string, *neturl.URL, io.Reader) (string, string, int, error) {
+	c.stream = func(context.Context, *rest.Config, string, *neturl.URL, io.Reader) (string, string, int, error) {
 		return "", "", 0, errors.New("connection refused")
 	}
 

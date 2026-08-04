@@ -208,17 +208,17 @@ func (c *Client) DescribePod(ctx context.Context, cluster, namespace, pod string
 // streamFunc performs one exec sub-resource SPDY stream and returns the
 // captured stdout/stderr and the command's exit code (0 if it completed
 // without a non-zero-exit error).
-type streamFunc func(cfg *rest.Config, method string, url *neturl.URL, stdin io.Reader) (stdout, stderr string, exitCode int, err error)
+type streamFunc func(ctx context.Context, cfg *rest.Config, method string, url *neturl.URL, stdin io.Reader) (stdout, stderr string, exitCode int, err error)
 
 // defaultStream is streamFunc's real implementation, used outside tests.
-func defaultStream(cfg *rest.Config, method string, url *neturl.URL, stdin io.Reader) (string, string, int, error) {
+func defaultStream(ctx context.Context, cfg *rest.Config, method string, url *neturl.URL, stdin io.Reader) (string, string, int, error) {
 	executor, err := remotecommand.NewSPDYExecutor(cfg, method, url)
 	if err != nil {
 		return "", "", 0, err
 	}
 
 	var stdout, stderr bytes.Buffer
-	err = executor.StreamWithContext(context.Background(), remotecommand.StreamOptions{
+	err = executor.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin:  stdin,
 		Stdout: &stdout,
 		Stderr: &stderr,
@@ -273,7 +273,7 @@ func (c *Client) Exec(ctx context.Context, cluster, namespace, pod, containerNam
 			Stderr:    true,
 		}, scheme.ParameterCodec)
 
-	stdout, stderr, exitCode, err := c.stream(execConfig, "POST", req.URL(), nil)
+	stdout, stderr, exitCode, err := c.stream(ctx, execConfig, "POST", req.URL(), nil)
 	if err != nil {
 		return ExecResult{}, fmt.Errorf("kubernetes: exec in pod %q: %w", pod, err)
 	}

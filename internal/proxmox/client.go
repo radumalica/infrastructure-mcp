@@ -77,7 +77,7 @@ func (c *Client) httpClientFor(instance string, ep inventory.ServiceEndpoint) *h
 	}
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // explicit, per-instance, documented lab/dev opt-in — see ServiceEndpoint.InsecureSkipVerify
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	cl := &http.Client{Timeout: c.httpClient.Timeout, Transport: transport}
 	c.insecureClients[instance] = cl
 	return cl
