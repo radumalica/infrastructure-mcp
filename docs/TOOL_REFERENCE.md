@@ -18,6 +18,10 @@ Conventions that apply across the whole tool surface (see
   `proxmox_start_vm`, `proxmox_stop_vm`, `proxmox_snapshot`) require
   `confirm: true`; without it they return `status: "confirmation_required"`
   and take no action. See [ADR 0007](adr/0007-structured-errors-and-confirm-gated-mutations.md).
+- Those same mutating tools also accept `dry_run: true`, which returns
+  `status: "dry_run"` and a `message` describing the exact command/API call
+  that would be made, taking no action — even if `confirm: true` is also
+  set. `dry_run` always wins over `confirm`.
 
 ---
 
@@ -291,6 +295,7 @@ Conventions that apply across the whole tool surface (see
 | `server` | yes | inventory server name |
 | `container` | yes | container name or ID |
 | `confirm` | yes to act | must be `true` to actually restart |
+| `dry_run` | no | see `dry_run` above — shows the command, takes no action |
 
 Unconfirmed call:
 
@@ -571,6 +576,7 @@ not normalized — read it according to the datasource you queried.
 | `vmid` | yes | numeric VM/container ID |
 | `type` | no | `qemu` (default) or `lxc` |
 | `confirm` | yes to act | must be `true` |
+| `dry_run` | no | see `dry_run` above — shows the API call, takes no action |
 
 Confirmed call — starting is asynchronous, check the returned `upid` with `proxmox_tasks`:
 

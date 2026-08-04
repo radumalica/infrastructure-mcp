@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -210,6 +211,55 @@ func TestDockerRestart_RequiresConfirmation(t *testing.T) {
 	}
 	if out.Status != "confirmation_required" {
 		t.Errorf("Status = %q, want confirmation_required", out.Status)
+	}
+}
+
+func TestDockerRestart_DryRun(t *testing.T) {
+	diag := &fakeDockerDiagnostics{}
+	session := newDockerSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "docker_restart",
+		Arguments: map[string]any{"server": "archive", "container": "web", "dry_run": true},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+	}
+	if diag.sawContainer != "" {
+		t.Error("expected Restart not to be called on a dry run")
+	}
+
+	raw, _ := json.Marshal(result.StructuredContent)
+	var out DockerRestartOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.Status != "dry_run" {
+		t.Errorf("Status = %q, want dry_run", out.Status)
+	}
+	if !strings.Contains(out.Message, "docker restart web") {
+		t.Errorf("Message = %q, want it to mention the command", out.Message)
+	}
+}
+
+// TestDockerRestart_DryRunWinsOverConfirm proves dry_run short-circuits
+// even when confirm is also set — a dry run should never mutate anything,
+// regardless of what else the caller passed.
+func TestDockerRestart_DryRunWinsOverConfirm(t *testing.T) {
+	diag := &fakeDockerDiagnostics{}
+	session := newDockerSession(t, diag)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "docker_restart",
+		Arguments: map[string]any{"server": "archive", "container": "web", "confirm": true, "dry_run": true},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("CallTool failed: err=%v result=%+v", err, result)
+	}
+	if diag.sawContainer != "" {
+		t.Error("expected Restart not to be called when dry_run is set, even with confirm: true")
 	}
 }
 

@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -17,6 +18,7 @@ type ProxmoxStartVMInput struct {
 	VMID     int    `json:"vmid" jsonschema:"the guest's numeric VM/container ID"`
 	Type     string `json:"type,omitempty" jsonschema:"guest type: 'qemu' (default) or 'lxc'"`
 	Confirm  bool   `json:"confirm,omitempty" jsonschema:"must be true to actually start the guest; otherwise the tool reports what it would do without acting"`
+	DryRun   bool   `json:"dry_run,omitempty" jsonschema:"if true, report the exact API call that would be made and return without acting or requiring confirm"`
 }
 
 // TargetServer implements Targeted.
@@ -49,9 +51,21 @@ type ProxmoxStartVMOutput struct {
 func RegisterProxmoxStartVM(server *mcp.Server, logger *slog.Logger, diag ProxmoxDiagnostics) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "proxmox_start_vm",
-		Description: "Start a QEMU VM or LXC container on a Proxmox node. This is a state-changing action: it requires `confirm: true`, and returns without acting if confirmation is missing. Starting is asynchronous — the response carries a task UPID, not confirmation the guest has finished starting; check it with proxmox_tasks.",
+		Description: "Start a QEMU VM or LXC container on a Proxmox node. This is a state-changing action: it requires `confirm: true`, and returns without acting if confirmation is missing. Starting is asynchronous — the response carries a task UPID, not confirmation the guest has finished starting; check it with proxmox_tasks. Set `dry_run: true` to see the exact API call that would be made without needing confirm at all.",
 	}, withLogging(logger, "proxmox_start_vm", func(ctx context.Context, req *mcp.CallToolRequest, in ProxmoxStartVMInput) (*mcp.CallToolResult, ProxmoxStartVMOutput, error) {
 		guestType := in.guestType()
+
+		if in.DryRun {
+			return nil, ProxmoxStartVMOutput{
+				Instance:  in.Instance,
+				Node:      in.Node,
+				VMID:      in.VMID,
+				Type:      guestType,
+				Status:    "dry_run",
+				Message:   fmt.Sprintf("Would call: POST /nodes/%s/%s/%d/status/start (instance %q). No action was taken.", in.Node, guestType, in.VMID, in.Instance),
+				Timestamp: time.Now().UTC().Format(time.RFC3339),
+			}, nil
+		}
 
 		if !in.Confirm {
 			return nil, ProxmoxStartVMOutput{

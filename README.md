@@ -693,6 +693,7 @@ Tools never return a raw Go error. Every failure is shaped as:
 - Least privilege
 - Read-only by default
 - Dangerous actions require explicit confirmation (e.g. `docker_restart` requires `confirm: true` and is a no-op otherwise)
+- Those same mutating tools accept `dry_run: true` to preview the exact command/API call that would run without acting — and it takes priority over `confirm` even if both are set
 - `-transport=http` is fail-closed: it refuses to start without a bearer token (`MCP_HTTP_TOKEN`) unless `-allow-anonymous-http` is explicitly passed
 - TLS certificate verification is on by default for Grafana/Proxmox; `insecure_skip_verify: true` disables it per-instance — lab/dev only, same posture as `-insecure-ignore-host-key` for SSH
 

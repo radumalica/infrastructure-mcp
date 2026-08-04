@@ -34,7 +34,7 @@ This file is the single progress log — updated after each completed feature, w
 | operator-features | `cisco_backup` pagination fix (`terminal length 0`) | done (Telnet only; SSH limitation documented, not fixed) |
 | operator-features | `cisco_backup_diff` — config drift detection | done |
 | operator-features | `insecure_skip_verify` per-instance TLS opt-in (Grafana/Proxmox) | done |
-| operator-features | `dry_run` convention on mutating tools | not started |
+| operator-features | `dry_run` convention on mutating tools | done |
 | operator-features | Audit history MCP resource | not started |
 | operator-features | `diagnose_docker()` composite tool | not started |
 | operator-features | `check_inventory_health()` tool | not started |
@@ -298,6 +298,16 @@ Resolves the "known limitation, not fixed here" this project's own v0.6 Proxmox 
 
 - **`internal/kubernetes.streamFunc` was silently dropping the caller's `context.Context`**: the field's signature had no `ctx` parameter, and `defaultStream` (the real, production-only implementation — all `TestExec*` cases substitute `c.stream` with a fake, so this path had zero test coverage) called `executor.StreamWithContext(context.Background(), ...)` regardless of what `Exec` was passed. A hung exec against an unresponsive pod could never be cancelled or time out, contradicting this project's own "`context.Context` everywhere; timeout, cancellation, and retry support" rule. Fixed by adding `ctx context.Context` as `streamFunc`'s first parameter, threading `Exec`'s `ctx` through to `StreamWithContext`, and updating the three fake closures in `client_test.go` to match.
 - **Ran `golangci-lint` against this branch for the first time** (via the same `docker run golangci/golangci-lint` pattern used previously for Trivy) — it hadn't been run since work on this branch started. Surfaced one real finding: `G304` in `internal/backupstore/store.go`'s `os.ReadFile(path)` — a false positive, `target` is whitelist-validated by `targetNamePattern` before ever being joined into `path`; excluded in `.golangci.yml` following the same narrow, per-file, documented precedent as the existing G304/G402 exclusions. Also dropped the now-redundant inline `//nolint:gosec` comments on the Grafana/Proxmox `InsecureSkipVerify` lines, since the file-level `.golangci.yml` exclusions already cover them and having both was belt-and-suspenders for no reason.
+- Full local gate green: `gofmt`, `go build`, `go vet`, `go test ./... -race -cover`, `golangci-lint run ./...` (0 issues).
+
+### 2026-08-03 — operator-features: `dry_run` convention on mutating tools
+
+Adds `dry_run bool` to the four existing confirm-gated mutating tools (`docker_restart`, `proxmox_start_vm`, `proxmox_stop_vm`, `proxmox_snapshot`). An operator (or an agent acting on their behalf) can now see exactly what would happen before opting in, without needing to already know to pass `confirm: false` and read a generic message.
+
+- **`dry_run` is checked before, and takes priority over, `confirm`** — even `{confirm: true, dry_run: true}` takes no action. This is deliberate: a dry run should never mutate anything regardless of what else was passed, so a caller can't accidentally combine flags into a real action.
+- **The `dry_run` response is more specific than `confirmation_required`**: `confirmation_required`'s `message` is a generic "set confirm: true" prompt; `dry_run`'s `message` names the actual command/API call — `docker restart <container>` for `docker_restart`, and `POST /nodes/<node>/<type>/<vmid>/status/start` (etc., including the `snapname` form value for `proxmox_snapshot`) for the Proxmox tools, mirroring `internal/proxmox.guestPath`'s own path shape without importing the unexported helper.
+- `status: "dry_run"` is a new, distinct output value from `confirmation_required` on all four tools' existing output structs — no new fields needed there since `Message` already existed.
+- Tests: for each of the four tools, one case proving no adapter call happens on a dry run, and (for `docker_restart`) one explicit case proving `dry_run: true` wins even when `confirm: true` is also set.
 - Full local gate green: `gofmt`, `go build`, `go vet`, `go test ./... -race -cover`, `golangci-lint run ./...` (0 issues).
 
 ## Decisions & Deviations from a literal README reading
