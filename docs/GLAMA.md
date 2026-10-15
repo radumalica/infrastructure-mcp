@@ -1,0 +1,44 @@
+# Glama listing
+
+[Glama](https://glama.ai) builds listed servers itself: it ignores this
+repository's `Dockerfile`, clones the repo into `/app`, runs the configured build
+steps there, and starts the container with the configured command so it can
+inspect the server. The values below are what the server's admin page needs.
+They were checked by running the same steps in a clean `debian:trixie-slim`
+container, but Glama's form formats come from maintainer reports, not official
+documentation, so re-verify if the form changes.
+
+## Build steps (JSON array of shell commands)
+
+```json
+[
+  "apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*",
+  "curl -fsSL https://go.dev/dl/go1.26.9.linux-$(dpkg --print-architecture).tar.gz | tar -C /usr/local -xz",
+  "GOCACHE=/tmp/go-cache GOPATH=/tmp/go /usr/local/go/bin/go build -buildvcs=false -trimpath -ldflags='-s -w' -o /usr/local/bin/infrastructure-mcp ./cmd/server"
+]
+```
+
+Keep the Go version in step with `go` in `go.mod`.
+
+## CMD arguments (JSON array)
+
+```json
+[
+  "mcp-proxy",
+  "--",
+  "/usr/local/bin/infrastructure-mcp",
+  "-inventory",
+  "/app/examples/demo/inventory.demo.yaml"
+]
+```
+
+`mcp-proxy` exposes the stdio server to Glama. The inventory is the secret-free
+demo one, so the server starts and lists its tools without any real
+infrastructure. It must not be `configs/inventory.example.yaml`, which fails to
+load unless its `${VAR}` secrets are set.
+
+## Notes
+
+- Arbitrary command execution (`run_command`, `docker_exec`, `kubectl_exec`) is
+  off by default, so Glama inspects only the named, read-mostly tools.
+- `glama.json` at the repository root lets the owner claim the listing.
