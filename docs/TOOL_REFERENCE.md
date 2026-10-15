@@ -1,9 +1,9 @@
 # Tool Reference
 
-Every tool below is registered in `cmd/server/main.go` and implemented under
-`mcp/tools/`. This reference lists each tool's input parameters and a sample
-output shape. All example values are synthetic — copy-paste the shape, not
-the data.
+Every tool below is implemented under `mcp/tools/`; named tools are registered
+in `cmd/server/main.go` by default. This reference lists each tool's input
+parameters and a sample output shape. All example values are synthetic —
+copy-paste the shape, not the data.
 
 Conventions that apply across the whole tool surface (see
 [Tool Design Philosophy](../README.md#tool-design-philosophy) in the README):
@@ -76,6 +76,11 @@ Unhealthy — one or more problems, every one reported in the same call:
 ```
 
 ### `run_command`
+
+> **Opt-in escape hatch:** this tool is not registered by default. Start the
+> server with `-enable-run-command` only when unrestricted shell execution is
+> intentional. Connected agents can run arbitrary commands on inventory
+> targets; prefer the named tools elsewhere in this reference.
 
 | Param | Required | Description |
 |---|---|---|
@@ -344,6 +349,8 @@ Confirmed call:
 
 ### `docker_exec`
 
+> **Opt-in:** registered only with `-enable-run-command` (ADR 0009).
+
 Container-scoped equivalent of `run_command` — not confirm-gated, following `run_command`'s own convention rather than `docker_restart`'s. A non-zero `exit_code` is reported as data, not a tool error.
 
 | Param | Required | Description |
@@ -455,6 +462,8 @@ Container-scoped equivalent of `run_command` — not confirm-gated, following `r
 ```
 
 ### `kubectl_exec`
+
+> **Opt-in:** registered only with `-enable-run-command` (ADR 0009).
 
 Pod-scoped equivalent of `run_command`/`docker_exec` — not confirm-gated. A non-zero `exit_code` is reported as data, not a tool error.
 

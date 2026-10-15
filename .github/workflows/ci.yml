@@ -45,6 +45,17 @@ jobs:
       - name: Test (race detector, coverage)
         run: go test ./... -race -cover
 
+      - name: Build public operator skill archive
+        run: bash scripts/package-skills.sh ci dist/skills
+
+      - name: Upload public operator skill archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: infrastructure-mcp-operator-skill
+          path: dist/skills/infrastructure-mcp-operator-ci.zip
+          if-no-files-found: error
+          retention-days: 7
+
   lint:
     name: lint
     runs-on: ubuntu-latest

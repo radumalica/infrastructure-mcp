@@ -1,5 +1,5 @@
-# Two flavors of old network gear that run_command and the cisco_* tools
-# reach transparently, no tool-layer changes needed — see ADR 0004 and
+# Two flavors of old network gear that the cisco_* tools (and run_command,
+# if started with -enable-run-command) reach transparently, no tool-layer changes needed — see ADR 0004 and
 # ADR 0005 in docs/adr/.
 
 routers:

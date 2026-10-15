@@ -5,6 +5,7 @@
 *.test
 *.out
 coverage.*
+/dist/
 
 # Local config with secrets
 configs/inventory.local.yaml

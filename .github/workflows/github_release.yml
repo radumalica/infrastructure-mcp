@@ -27,7 +27,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-          
+
 
       - name: Conventional commit check
         uses: cocogitto/cocogitto-action@9a9fe03b31c47444290c0d7f9b1ee1b44ee13f20 #v4.1.0
@@ -53,7 +53,7 @@ jobs:
             # embedded newline corrupts that file's key=value format for
             # every step after it ("Invalid format 'v0.3.0'").
             next_version=$(printf '%s\n' "$cog_stdout" | tail -n1 | tr -d '[:space:]')
-            if ! printf '%s' "$next_version" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+'; then
+            if ! printf '%s' "$next_version" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$'; then
               echo "cog bump succeeded but its output didn't look like a version:"
               printf '%s\n' "$cog_stdout"
               exit 1
@@ -156,12 +156,28 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Package public operator skill
+        if: steps.next_version.outputs.has_release == 'true' && steps.existing_release.outputs.exists == 'false'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Validate and package public operator skill
+        if: steps.next_version.outputs.has_release == 'true' && steps.existing_release.outputs.exists == 'false'
+        env:
+          SKILL_VERSION: ${{ steps.next_version.outputs.version }}
+        run: |
+          go test ./internal/skilltest -run '^TestSkillPackages$' -count=1
+          bash scripts/package-skills.sh "$SKILL_VERSION" dist/skills
+
       - name: Upload github release
         if: steps.next_version.outputs.has_release == 'true' && steps.existing_release.outputs.exists == 'false'
         uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 #v2.3
         with:
           body_path: release-notes.md
           tag_name: ${{ steps.next_version.outputs.version }}
+          files: dist/skills/infrastructure-mcp-operator-${{ steps.next_version.outputs.version }}.zip
 
   docker:
     name: docker
