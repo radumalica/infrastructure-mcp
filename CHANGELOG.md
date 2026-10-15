@@ -1,4 +1,22 @@
-## v0.5.1 - 2026-07-31
+## v0.6.0 - 2026-10-15
+#### Features
+- add check_inventory_health tool - (698a94a) - tox
+- add audit history MCP resource (audit://recent) - (42684ee) - tox
+- add dry_run convention to confirm-gated mutating tools - (8b4fdc0) - tox
+- add per-instance insecure_skip_verify TLS opt-out for Grafana/Proxmox - (ce17b16) - tox
+- add cisco_backup_diff tool for config drift detection - (5d1a0dd) - tox
+- add kubectl_exec tool, the pod-scoped equivalent of docker_exec - (1845f32) - tox
+- add docker_exec tool, the container-scoped equivalent of run_command - (12360b9) - tox
+#### Bug Fixes
+- thread context.Context through kubectl_exec's SPDY stream - (9b8de21) - tox
+- disable pagination before cisco_backup on Telnet-connected devices - (a5e2139) - tox
+#### Documentation
+- (**changelog**) update for v0.5.1 [skip ci] - (f19a931) - repo-gha[bot]
+- log kubectl_exec ctx fix and first golangci-lint pass in PROGRESS.md - (8b04ce5) - tox
+
+- - -
+
+## v0.5.1 - 2026-10-15
 #### Bug Fixes
 - update docs - (fde18ca) - Radu
 #### Documentation
@@ -8,7 +26,7 @@
 
 - - -
 
-## v0.5.0 - 2026-07-31
+## v0.5.0 - 2026-10-15
 #### Features
 - add banner SVG for project branding in README - (cd6ee91) - tox
 #### Documentation
@@ -17,7 +35,7 @@
 
 - - -
 
-## v0.4.0 - 2026-07-31
+## v0.4.0 - 2026-10-15
 #### Features
 - support SSH public-key auth for routers/switches (#16) - (c53f85b) - Radu
 #### Documentation
@@ -25,7 +43,7 @@
 
 - - -
 
-## v0.3.0 - 2026-07-31
+## v0.3.0 - 2026-10-15
 #### Features
 - v0.7 (partial) Networking — Cisco read-only diagnostics (#11) - (2b7fc21) - Radu
 - v0.6 Proxmox (nodes, VMs, tasks, start/stop/snapshot) (#9) - (cd01ab4) - Radu
@@ -47,7 +65,7 @@
 
 - - -
 
-## v0.2.0 - 2026-07-31
+## v0.2.0 - 2026-10-15
 #### Features
 - v0.4 Kubernetes + v0.5 Grafana tools (#7) - (42c546d) - Radu
 #### Miscellaneous
@@ -56,14 +74,14 @@
 
 - - -
 
-## v0.1.1 - 2026-07-31
+## v0.1.1 - 2026-10-15
 #### Bug Fixes
 - require a bearer token on -transport=http (#4) - (cf61e73) - Radu
 - require a bearer token on -transport=http (security) - (a76e553) - tox
 
 - - -
 
-## v0.1.0 - 2026-07-31
+## v0.1.0 - 2026-10-15
 #### Features
 - implement GitHub workflows for release management, conventional commit checks, and security scanning (#2) - (3f753c4) - Radu
 - implement GitHub workflows for release management, conventional commit checks, and security scanning - (0b59ab9) - tox
@@ -76,7 +94,7 @@
 
 - - -
 
-## v0.0.0 - 2026-07-31
+## v0.0.0 - 2026-10-15
 #### Features
 - CI/CD pipelines, Docker packaging, and remote MCP transport - (cddbd3e) - tox
 - v0.3 Docker tools (docker_ps, docker_logs, docker_stats, docker_restart, docker_images) - (c3bb722) - tox
