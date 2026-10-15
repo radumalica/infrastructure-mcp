@@ -44,11 +44,11 @@ This file is the single progress log — updated after each completed feature, w
 
 ## Log
 
-### 2026-10-15 — run_command opt-in + free Agensi operator skill
+### 2026-10-15 — run_command opt-in + free operator skill
 
 - **Breaking:** `run_command` is no longer registered by default; start the server with `-enable-run-command` to restore it (startup logs a warning). See ADR 0009. README, `docs/TOOL_REFERENCE.md` and `docker-compose.yaml` updated; tests cover flag default and tool registration through the real MCP protocol.
 - Added the free `infrastructure-mcp-operator` agent skill (`.github/skills/`), `scripts/package-skills.sh`, CI artifact upload and GitHub-release attachment, and `internal/skilltest` (package-shape, secret-marker, and SKILL.md safety-phrase checks).
-- `docs/AGENSI_SKILL_SUITE.md` documents the free/paid boundary; paid skills live in a separate private repo. Agensi listing submission is manual.
+- `docs/AGENT_SKILLS.md` documents installation, packaging and validation of the free skill.
 
 ### 2026-07-24 — README overhaul into a professional OSS README + LICENSE
 User request: turn the original "Technical Architecture & Development Plan" doc into a proper open-source README, while keeping its structure and content.

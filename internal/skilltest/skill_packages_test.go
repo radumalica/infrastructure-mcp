@@ -62,7 +62,7 @@ func validatePublicSkillSet(t *testing.T, skillsRoot string, expected []string) 
 		}
 	}
 	if strings.Join(actual, ",") != strings.Join(expected, ",") {
-		t.Fatalf("public skills = %v, want exactly %v; premium skills must live outside this repository", actual, expected)
+		t.Fatalf("public skills = %v, want exactly %v; only the free operator skill may live in this repository", actual, expected)
 	}
 }
 

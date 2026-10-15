@@ -513,11 +513,8 @@ above, then install the skill from
 [`.github/skills/infrastructure-mcp-operator`](.github/skills/infrastructure-mcp-operator/)
 or a GitHub release archive.
 
-Advanced incident-triage, fleet-health, and approval-gated remediation workflows
-are distributed separately through Agensi and are not part of this repository's
-MIT-licensed source or GitHub release artifacts. See the
-[distribution guide](docs/AGENSI_SKILL_SUITE.md) for the free-to-paid product
-boundary and installation limitations.
+See the [agent skills guide](docs/AGENT_SKILLS.md) for installation and
+validation details.
 
 ---
 
