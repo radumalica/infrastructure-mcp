@@ -1,0 +1,39 @@
+# Try Infrastructure MCP in about two minutes with no real infrastructure:
+# two throwaway SSH targets plus the server, all on localhost.
+#   ./run-demo.sh        # generates a throwaway key, starts everything, calls tools
+#   ./run-demo.sh down   # stops and removes everything
+services:
+  target-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.target
+    volumes:
+      - ./.demo-keys:/keys:ro
+
+  target-db:
+    build:
+      context: .
+      dockerfile: Dockerfile.target
+    volumes:
+      - ./.demo-keys:/keys:ro
+
+  infrastructure-mcp:
+    build:
+      context: ../..
+    command:
+      - "-inventory=/etc/demo/inventory.yaml"
+      - "-transport=http"
+      - "-http-addr=:8080"
+      # Lab only: the throwaway targets regenerate host keys on every build.
+      - "-insecure-ignore-host-key"
+    environment:
+      # Demo-only token for a server bound to localhost. Never reuse it.
+      - MCP_HTTP_TOKEN=demo-token-not-a-secret
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./inventory.demo.yaml:/etc/demo/inventory.yaml:ro
+      - ./.demo-keys:/keys:ro
+    depends_on:
+      - target-web
+      - target-db

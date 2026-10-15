@@ -1,0 +1,18 @@
+# Throwaway Linux target for the try-it demo: an sshd with a `hermes` user that
+# accepts one public key. Not hardened, never expose it beyond localhost.
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssh-server procps \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /run/sshd \
+ && ssh-keygen -A \
+ && useradd -m -s /bin/bash hermes \
+ && usermod -p '*' hermes \
+ && printf 'PasswordAuthentication no\nPermitRootLogin no\n' > /etc/ssh/sshd_config.d/demo.conf
+
+COPY target-entrypoint.sh /usr/local/bin/target-entrypoint.sh
+RUN chmod +x /usr/local/bin/target-entrypoint.sh
+
+EXPOSE 22
+ENTRYPOINT ["/usr/local/bin/target-entrypoint.sh"]
