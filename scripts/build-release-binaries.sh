@@ -24,6 +24,15 @@ fi
 name="infrastructure-mcp"
 platforms=(linux/amd64 linux/arm64 darwin/amd64 darwin/arm64)
 
+# The output directory is deleted below, so refuse the checkout itself and any
+# of its ancestors (for example ".", "..", or "/").
+resolved_output="$(mkdir -p "$output_dir" && cd "$output_dir" && pwd -P)"
+resolved_root="$(cd "$repo_root" && pwd -P)"
+if [[ "$resolved_root/" == "$resolved_output/"* ]]; then
+  echo "output directory must not be the repository root or one of its parents: $output_dir" >&2
+  exit 1
+fi
+
 rm -rf "$output_dir"
 mkdir -p "$output_dir"
 stage="$(mktemp -d)"
@@ -43,5 +52,10 @@ for platform in "${platforms[@]}"; do
     "${name}_${version}_${goos}_${goarch}"
 done
 
-(cd "$output_dir" && sha256sum ./*.tar.gz | sed 's# \./# #' > SHA256SUMS)
+if command -v sha256sum >/dev/null 2>&1; then
+  checksum=(sha256sum)
+else
+  checksum=(shasum -a 256)
+fi
+(cd "$output_dir" && "${checksum[@]}" ./*.tar.gz | sed 's# \./# #' > SHA256SUMS)
 printf 'Created release binaries in %s\n' "$output_dir"

@@ -8,7 +8,7 @@ surface left (see the [Roadmap](README.md#roadmap)).
 ```bash
 git clone https://github.com/radumalica/infrastructure-mcp.git
 cd infrastructure-mcp
-go build ./... && go vet ./... && gofmt -l . && go test ./... -race -cover
+go build ./... && go vet ./... && test -z "$(gofmt -l .)" && go test ./... -race -cover
 ```
 
 These are the same checks CI runs, and they are required on every pull request
