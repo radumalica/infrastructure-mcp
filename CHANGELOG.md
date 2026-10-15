@@ -1,3 +1,11 @@
+## v0.8.1 - 2026-10-15
+#### Bug Fixes
+- (**release**) limit Trivy SARIF output to CRITICAL/HIGH (#25) - (d7890c0) - Radu
+#### Documentation
+- (**changelog**) update for v0.8.0 [skip ci] - (4d701b5) - repo-gha[bot]
+
+- - -
+
 ## v0.8.0 - 2026-10-15
 #### Features
 - (**examples**) try-it demo, demo GIF and CI smoke test (#23) - (61f7646) - Radu
