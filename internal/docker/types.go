@@ -42,6 +42,14 @@ type Image struct {
 	Size       string
 }
 
+// ExecResult is the outcome of running a command inside a container via
+// `docker exec`.
+type ExecResult struct {
+	Stdout   string
+	Stderr   string
+	ExitCode int
+}
+
 // ContainerStats describes a single `docker stats --no-stream` sample.
 type ContainerStats struct {
 	ID         string

@@ -109,6 +109,24 @@ func (c *Client) Restart(ctx context.Context, server, container string) error {
 	return nil
 }
 
+// Exec runs an arbitrary command inside a running container via `docker
+// exec`, the container-scoped equivalent of the top-level run_command
+// tool. Like run_command, a non-zero exit code is not treated as an
+// adapter error — the exit code is reported to the caller as data, since
+// a command run inside a container (e.g. `grep` finding nothing) can
+// legitimately fail without the exec mechanism itself having failed.
+func (c *Client) Exec(ctx context.Context, server, container, command string) (ExecResult, error) {
+	if err := validateContainerRef(container); err != nil {
+		return ExecResult{}, err
+	}
+	cmd := fmt.Sprintf("docker exec %s sh -c %s", container, shellQuoteSingle(command))
+	res, err := c.runner.Run(ctx, server, cmd)
+	if err != nil {
+		return ExecResult{}, fmt.Errorf("docker: exec on %q: %w", server, err)
+	}
+	return ExecResult{Stdout: res.Stdout, Stderr: res.Stderr, ExitCode: res.ExitCode}, nil
+}
+
 func clampTail(tail int) int {
 	switch {
 	case tail <= 0:

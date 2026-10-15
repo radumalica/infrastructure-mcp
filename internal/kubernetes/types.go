@@ -54,6 +54,14 @@ type ContainerStatus struct {
 	Reason       string // populated for waiting/terminated
 }
 
+// ExecResult is the outcome of running a command inside a pod's container
+// via the exec sub-resource.
+type ExecResult struct {
+	Stdout   string
+	Stderr   string
+	ExitCode int
+}
+
 // PodDescription is a structured stand-in for `kubectl describe pod`:
 // the pod's spec/status highlights plus its recent events, rather than
 // kubectl's full free-text dump.

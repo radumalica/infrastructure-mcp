@@ -13,4 +13,5 @@ type KubernetesDiagnostics interface {
 	ListEvents(ctx context.Context, cluster, namespace string) ([]kubernetes.EventEntry, error)
 	DescribePod(ctx context.Context, cluster, namespace, pod string) (kubernetes.PodDescription, error)
 	ListNodes(ctx context.Context, cluster string) ([]kubernetes.NodeEntry, error)
+	Exec(ctx context.Context, cluster, namespace, pod, container string, command []string) (kubernetes.ExecResult, error)
 }

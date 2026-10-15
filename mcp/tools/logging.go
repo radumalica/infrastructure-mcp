@@ -7,6 +7,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"infrastructure-mcp/internal/audit"
 	"infrastructure-mcp/internal/toolerr"
 )
 
@@ -43,6 +44,44 @@ func withLogging[In Targeted, Out any](
 		} else {
 			logger.Info("tool executed", append(attrs, "result", "ok")...)
 		}
+
+		return result, out, err
+	}
+}
+
+// auditable is implemented by a mutating tool's output struct so
+// withAudit can record what happened without per-tool boilerplate — every
+// existing mutating tool's output already carries a Status string
+// (confirmation_required/dry_run/restarted/...), so this is a thin
+// accessor, not a new concept.
+type auditable interface {
+	auditStatus() string
+}
+
+// withAudit wraps a mutating tool's handler to additionally record one
+// entry per call in log (see internal/audit), exposed to agents via the
+// audit://recent MCP resource. Composes with withLogging — wrap the
+// withLogging-wrapped handler, so both a structured log line and an audit
+// entry come out of one call.
+func withAudit[In Targeted, Out auditable](
+	log *audit.Log,
+	toolName string,
+	handler func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error),
+) func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error) {
+	return func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
+		result, out, err := handler(ctx, req, in)
+
+		status := "error"
+		if err == nil {
+			status = out.auditStatus()
+		}
+		log.Record(audit.Entry{
+			Timestamp: time.Now().UTC(),
+			Tool:      toolName,
+			Target:    in.TargetServer(),
+			User:      clientName(req),
+			Status:    status,
+		})
 
 		return result, out, err
 	}
