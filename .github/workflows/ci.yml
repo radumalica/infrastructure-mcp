@@ -75,3 +75,43 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
+
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Reports only vulnerabilities in code paths this binary can reach,
+      # including the Go standard library at the pinned go.mod version.
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+  image-scan:
+    name: image-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Scans the real image (stdlib + base layers), the same gate the release
+      # workflow applies, so a failing publish is caught on the PR instead.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          pull: true
+          tags: infrastructure-mcp:scan
+
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: infrastructure-mcp:scan
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
