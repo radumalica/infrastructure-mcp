@@ -1,3 +1,11 @@
+## v0.7.0 - 2026-10-15
+#### Features
+- make run_command opt-in and add free operator skill (#19) - (70db976) - Radu
+#### Documentation
+- (**changelog**) update for v0.6.0 [skip ci] - (156151b) - repo-gha[bot]
+
+- - -
+
 ## v0.6.0 - 2026-10-15
 #### Features
 - add check_inventory_health tool - (698a94a) - tox
