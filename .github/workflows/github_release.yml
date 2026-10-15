@@ -171,13 +171,22 @@ jobs:
           go test ./internal/skilltest -run '^TestSkillPackages$' -count=1
           bash scripts/package-skills.sh "$SKILL_VERSION" dist/skills
 
+      - name: Build release binaries
+        if: steps.next_version.outputs.has_release == 'true' && steps.existing_release.outputs.exists == 'false'
+        env:
+          BINARY_VERSION: ${{ steps.next_version.outputs.version }}
+        run: bash scripts/build-release-binaries.sh "$BINARY_VERSION" dist/binaries
+
       - name: Upload github release
         if: steps.next_version.outputs.has_release == 'true' && steps.existing_release.outputs.exists == 'false'
         uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 #v2.3
         with:
           body_path: release-notes.md
           tag_name: ${{ steps.next_version.outputs.version }}
-          files: dist/skills/infrastructure-mcp-operator-${{ steps.next_version.outputs.version }}.zip
+          files: |
+            dist/skills/infrastructure-mcp-operator-${{ steps.next_version.outputs.version }}.zip
+            dist/binaries/*.tar.gz
+            dist/binaries/SHA256SUMS
 
   docker:
     name: docker
@@ -205,6 +214,7 @@ jobs:
         with:
           context: .
           load: true
+          pull: true
           tags: ${{ steps.image.outputs.name }}:scan
 
       - name: Trivy scan (blocks publish on CRITICAL/HIGH)
@@ -236,6 +246,7 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          pull: true
           tags: |
             ${{ steps.image.outputs.name }}:${{ needs.release.outputs.version }}
             ${{ steps.image.outputs.name }}:latest

@@ -1,6 +1,6 @@
 module infrastructure-mcp
 
-go 1.26.0
+go 1.26.9
 
 require (
 	github.com/go-playground/validator/v10 v10.30.3
