@@ -1,3 +1,11 @@
+## v0.7.1 - 2026-10-15
+#### Bug Fixes
+- (**deps**) bump x/net, x/crypto, x/text to clear Trivy findings (#20) - (ac5b968) - Radu
+#### Documentation
+- (**changelog**) update for v0.7.0 [skip ci] - (508a81a) - repo-gha[bot]
+
+- - -
+
 ## v0.7.0 - 2026-10-15
 #### Features
 - make run_command opt-in and add free operator skill (#19) - (70db976) - Radu
