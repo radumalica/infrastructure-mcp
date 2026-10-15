@@ -2,6 +2,14 @@
   <img src="assets/banner.svg" alt="Infrastructure MCP" width="100%">
 </p>
 
+<p align="center">
+  <a href="https://github.com/radumalica/infrastructure-mcp/actions/workflows/ci.yml"><img src="https://github.com/radumalica/infrastructure-mcp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/radumalica/infrastructure-mcp/releases/latest"><img src="https://img.shields.io/github/v/release/radumalica/infrastructure-mcp" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/radumalica/infrastructure-mcp" alt="MIT license"></a>
+  <img src="https://img.shields.io/github/go-mod/go-version/radumalica/infrastructure-mcp" alt="Go version">
+  <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-server-blue" alt="MCP server"></a>
+</p>
+
 # Infrastructure MCP Server
 
 **Give Claude Code, Cursor, and other AI agents safe access to your real infrastructure — without giving them raw SSH access.**
@@ -28,6 +36,10 @@ A self-hosted [Model Context Protocol](https://modelcontextprotocol.io) server t
 ---
 
 ## Quick Start
+
+**Prebuilt binary** (Linux and macOS, amd64 and arm64): download the archive for your platform from the [latest release](https://github.com/radumalica/infrastructure-mcp/releases/latest), verify it against `SHA256SUMS`, and unpack it. Or use Docker: `docker pull ghcr.io/radumalica/infrastructure-mcp:latest`.
+
+**From source:**
 
 ```bash
 git clone https://github.com/radumalica/infrastructure-mcp.git
@@ -831,7 +843,7 @@ AWS, Azure, GCP, VMware, TrueNAS, Ceph, Synology, IPMI, Redfish, OpenStack, Noma
 
 ## Contributing
 
-Contributions are welcome — this is an early-stage project and there's a lot of surface area left on the roadmap above.
+Contributions are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md). This is an early-stage project and there's a lot of surface area left on the roadmap above.
 
 1. Fork the repo and create a feature branch.
 2. Follow the existing package/adapter pattern: one isolated package per integration under `internal/`, a matching set of tools under `mcp/tools/`, wired into `cmd/server/main.go` — see [`docs/ADDING_AN_ADAPTER.md`](docs/ADDING_AN_ADAPTER.md) for the full walkthrough.
