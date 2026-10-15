@@ -19,7 +19,7 @@ A self-hosted [Model Context Protocol](https://modelcontextprotocol.io) server t
 | | Raw SSH access | Infrastructure MCP |
 |---|---|---|
 | Audit trail | ❌ | ✅ structured log per call (`tool`, `user`, `target`, `duration`, `result`) |
-| Input validation | ❌ | ✅ every parameter validated, no shell interpolation |
+| Input validation | ❌ | ✅ named tools validate every parameter; no shell interpolation |
 | Structured output | ❌ free text | ✅ JSON, every response |
 | Inventory-aware | ❌ agent picks the host | ✅ targets resolved by name/tag only |
 | Blast-radius control | ❌ | ✅ read-only by default, mutations require `confirm: true` |
@@ -81,10 +81,11 @@ Tools implemented and tested against the real MCP protocol so far:
 
 **Core (v0.1)**
 - `list_servers` — list inventory targets, optionally filtered by tag
-- `run_command` — run an arbitrary command against an inventory target
 - `uptime` — uptime and load averages
 - `disk_usage` — per-filesystem usage with warning/critical severity
 - `memory_usage` — memory utilization with warning/critical severity
+
+Optional compatibility escape hatch: `run_command` executes an arbitrary shell command against an inventory target. It is disabled by default and is registered only when the server starts with `-enable-run-command`. Prefer the named tools above; enabling this escape hatch grants connected agents unrestricted command execution on inventory targets.
 
 **Linux (v0.2)**
 - `failed_services` — systemd units in the failed state
@@ -151,6 +152,7 @@ See [Roadmap](#roadmap) for what's next.
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Connecting an AI Agent](#connecting-an-ai-agent)
+- [Agent Skills](#agent-skills)
 - [Examples](#examples)
 - [Tool Design Philosophy](#tool-design-philosophy)
 - [Security](#security)
@@ -431,6 +433,7 @@ More focused, single-concept inventory fragments (key-authenticated network devi
 | `-http-addr` | `:8080` | Address to listen on when `-transport=http` |
 | `-healthcheck` | `false` | Instead of starting the server, GET `-healthcheck-url` and exit 0/1 — used as the container `HEALTHCHECK` |
 | `-allow-anonymous-http` | `false` | Allow `-transport=http` to serve without a bearer token — **lab/dev only**, every tool becomes reachable to anyone who can reach the port |
+| `-enable-run-command` | `false` | Register the unrestricted `run_command` shell escape hatch — **high risk**, prefer named tools |
 
 Host key verification is **fail-closed by default**: an unrecognized target's connection is refused unless it's in `known_hosts` or you explicitly opt into insecure mode. `-transport=http` is fail-closed the same way: it refuses to start unless the `MCP_HTTP_TOKEN` environment variable is set (see below) or `-allow-anonymous-http` is passed explicitly.
 
@@ -458,7 +461,7 @@ Infrastructure MCP Server supports two transports from the same binary, so it wo
 
 ### Remote HTTP
 
-`-transport=http` requires a bearer token — `/mcp` exposes every registered tool, including `run_command`, so the server refuses to start without one (fail-closed, like host key verification above). Generate one and set it as `MCP_HTTP_TOKEN`:
+`-transport=http` requires a bearer token because `/mcp` exposes every registered tool. The server refuses to start without one (fail-closed, like host key verification above). Generate one and set it as `MCP_HTTP_TOKEN`:
 
 ```bash
 export MCP_HTTP_TOKEN=$(openssl rand -hex 32)
@@ -482,9 +485,29 @@ Point any remote-MCP-capable client at `http://<host>:8080/mcp` with that header
 
 Put the HTTP endpoint behind TLS and network-level access control (a reverse proxy, VPN, or private network) before exposing it beyond localhost — the server itself does not add its own transport-layer authentication.
 
-Once connected, over either transport, the agent sees only the tools listed under [Current Features](#current-features) — never raw shell access, never credentials.
+Once connected, over either transport, the agent sees the named tools listed under [Current Features](#current-features). Adapter authentication credentials remain server-side, but tool output such as logs, raw queries, and device configurations may itself contain sensitive data. Raw shell access is absent unless the operator explicitly starts the server with `-enable-run-command`.
 
 Ready-to-adapt client config files (stdio and remote-HTTP-via-`mcp-remote`) live under [`examples/mcp-client-config/`](examples/mcp-client-config/).
+
+---
+
+## Agent Skills
+
+The repository includes the free, portable `infrastructure-mcp-operator` skill.
+It teaches a connected agent how to select named infrastructure-mcp tools,
+preserve safety boundaries, and separate observed evidence from interpretation.
+
+The skill does not install or host this MCP server and never contains inventory
+or credentials. Connect infrastructure-mcp first using one of the transports
+above, then install the skill from
+[`.github/skills/infrastructure-mcp-operator`](.github/skills/infrastructure-mcp-operator/)
+or a GitHub release archive.
+
+Advanced incident-triage, fleet-health, and approval-gated remediation workflows
+are distributed separately through Agensi and are not part of this repository's
+MIT-licensed source or GitHub release artifacts. See the
+[distribution guide](docs/AGENSI_SKILL_SUITE.md) for the free-to-paid product
+boundary and installation limitations.
 
 ---
 
@@ -681,7 +704,8 @@ Tools never return a raw Go error. Every failure is shaped as:
 
 - No secrets in logs
 - No secrets in prompts
-- No shell interpolation — any user-supplied value that reaches a remote command is validated against a strict whitelist pattern first
+- Named tools do not interpolate unvalidated user input into shell commands
+- The unrestricted `run_command` escape hatch is disabled by default; `-enable-run-command` must be passed explicitly and grants connected agents arbitrary command execution on inventory targets
 - Validate all inputs
 - Whitelist inventory — no target is reachable unless it's named in the inventory
 - Least privilege
@@ -802,7 +826,7 @@ Contributions are welcome — this is an early-stage project and there's a lot o
 
 1. Fork the repo and create a feature branch.
 2. Follow the existing package/adapter pattern: one isolated package per integration under `internal/`, a matching set of tools under `mcp/tools/`, wired into `cmd/server/main.go` — see [`docs/ADDING_AN_ADAPTER.md`](docs/ADDING_AN_ADAPTER.md) for the full walkthrough.
-3. Match the existing conventions: structured errors via `internal/toolerr`, structured logging via the `withLogging` wrapper, inventory-driven targets, no shell interpolation of user input.
+3. Match the existing conventions: structured errors via `internal/toolerr`, structured logging via the `withLogging` wrapper, inventory-driven targets, and no shell interpolation of user input in named tools.
 4. Add tests — unit tests for adapters/parsing, and at least one test that exercises new tools through the real MCP protocol.
 5. Run `go build ./... && go vet ./... && gofmt -l . && go test ./... -race -cover` and, if you have it installed, `golangci-lint run ./...` before opening a PR — this is exactly what `ci.yml` runs, and it's a **required, non-optional check** on every PR into `main` (see [CI/CD](#cicd)).
 6. Use [Conventional Commits](https://www.conventionalcommits.org) for your commit messages (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`, `ci:`, ...) — the version bump, `CHANGELOG.md`, and release on merge are generated automatically from them.

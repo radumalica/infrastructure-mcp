@@ -51,7 +51,8 @@ func run() error {
 	httpAddr := flag.String("http-addr", ":8080", `address to listen on when -transport=http (e.g. ":8080")`)
 	healthcheck := flag.Bool("healthcheck", false, "instead of starting the server, GET -healthcheck-url and exit 0/1 on success/failure; used as the container HEALTHCHECK (the distroless base image has no shell/curl to run one externally)")
 	healthcheckURL := flag.String("healthcheck-url", "http://127.0.0.1:8080/healthz", "URL checked when -healthcheck is set")
-	allowAnonymousHTTP := flag.Bool("allow-anonymous-http", false, "allow -transport=http to serve without a bearer token (lab/dev only — every tool, including run_command, becomes reachable to anyone who can reach the port)")
+	allowAnonymousHTTP := flag.Bool("allow-anonymous-http", false, "allow -transport=http to serve without a bearer token (lab/dev only — every registered tool becomes reachable to anyone who can reach the port)")
+	enableRunCommand := registerRunCommandFlag(flag.CommandLine)
 	flag.Parse()
 
 	if *healthcheck {
@@ -59,7 +60,6 @@ func run() error {
 	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-
 	inv, err := inventory.Load(*inventoryPath)
 	if err != nil {
 		return fmt.Errorf("load inventory: %w", err)
@@ -100,7 +100,7 @@ func run() error {
 	}, nil)
 
 	tools.RegisterListServers(server, logger, inv)
-	tools.RegisterRunCommand(server, logger, remotePool)
+	registerRunCommand(server, logger, remotePool, *enableRunCommand)
 	tools.RegisterUptime(server, logger, linuxClient)
 	tools.RegisterDiskUsage(server, logger, linuxClient)
 	tools.RegisterMemoryUsage(server, logger, linuxClient)
@@ -156,6 +156,19 @@ func run() error {
 	}
 }
 
+func registerRunCommandFlag(flags *flag.FlagSet) *bool {
+	return flags.Bool("enable-run-command", false, "enable unrestricted shell command execution on inventory targets (disabled by default; high risk)")
+}
+
+func registerRunCommand(server *mcp.Server, logger *slog.Logger, runner tools.CommandRunner, enabled bool) {
+	if !enabled {
+		return
+	}
+
+	logger.Warn("unrestricted shell command execution enabled (-enable-run-command); connected agents can execute arbitrary commands on inventory targets")
+	tools.RegisterRunCommand(server, logger, runner)
+}
+
 // runHealthcheck performs a single GET against url and returns nil only
 // on a 2xx response, so it can double as the container HEALTHCHECK
 // command (`infrastructure-mcp -healthcheck`) on a base image with no
@@ -176,11 +189,10 @@ func runHealthcheck(url string) error {
 // resolveHTTPToken decides the bearer token required on /mcp requests.
 // It fails closed: -transport=http refuses to start without either a
 // token or an explicit -allow-anonymous-http opt-out, since every
-// registered tool (including run_command) is reachable over /mcp with
-// no other access control.
+// registered tool is reachable over /mcp with no other access control.
 func resolveHTTPToken(token string, allowAnonymous bool, addr string) (string, error) {
 	if token == "" && !allowAnonymous {
-		return "", fmt.Errorf("-transport=http requires MCP_HTTP_TOKEN to be set (every registered tool, including run_command, would otherwise be reachable to anyone who can reach %s) — set MCP_HTTP_TOKEN or pass -allow-anonymous-http to explicitly opt out for local/lab use", addr)
+		return "", fmt.Errorf("-transport=http requires MCP_HTTP_TOKEN to be set (every registered tool would otherwise be reachable to anyone who can reach %s) — set MCP_HTTP_TOKEN or pass -allow-anonymous-http to explicitly opt out for local/lab use", addr)
 	}
 	return token, nil
 }

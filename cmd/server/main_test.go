@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"io"
 	"log/slog"
 	"net/http"
@@ -10,7 +11,103 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"infrastructure-mcp/internal/ssh"
 )
+
+type stubCommandRunner struct{}
+
+func (stubCommandRunner) Run(context.Context, string, string) (ssh.Result, error) {
+	return ssh.Result{}, nil
+}
+
+func TestRegisterRunCommand(t *testing.T) {
+	tests := []struct {
+		name        string
+		enabled     bool
+		wantPresent bool
+	}{
+		{name: "disabled by default", enabled: false, wantPresent: false},
+		{name: "explicitly enabled", enabled: true, wantPresent: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := mcp.NewServer(&mcp.Implementation{Name: "test-server", Version: "test"}, nil)
+			registerRunCommand(server, slog.New(slog.NewTextHandler(io.Discard, nil)), stubCommandRunner{}, tt.enabled)
+
+			clientTransport, serverTransport := mcp.NewInMemoryTransports()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			type connectResult struct {
+				session *mcp.ServerSession
+				err     error
+			}
+			serverConnected := make(chan connectResult, 1)
+			go func() {
+				session, err := server.Connect(ctx, serverTransport, nil)
+				serverConnected <- connectResult{session: session, err: err}
+			}()
+
+			client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "test"}, nil)
+			session, err := client.Connect(ctx, clientTransport, nil)
+			if err != nil {
+				t.Fatalf("connect failed: %v", err)
+			}
+			defer session.Close()
+
+			var connected connectResult
+			select {
+			case connected = <-serverConnected:
+				if connected.err != nil {
+					t.Fatalf("server connect failed: %v", connected.err)
+				}
+				defer connected.session.Close()
+			case <-ctx.Done():
+				t.Fatalf("server connect did not complete: %v", ctx.Err())
+			}
+
+			result, err := session.ListTools(ctx, nil)
+			if err != nil {
+				t.Fatalf("ListTools failed: %v", err)
+			}
+
+			present := false
+			for _, tool := range result.Tools {
+				if tool.Name == "run_command" {
+					present = true
+				}
+			}
+			if present != tt.wantPresent {
+				t.Errorf("run_command present = %v, want %v", present, tt.wantPresent)
+			}
+		})
+	}
+}
+
+func TestRunCommandFlag(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "disabled by default", want: false},
+		{name: "explicitly enabled", args: []string{"-enable-run-command"}, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flags := flag.NewFlagSet("test", flag.ContinueOnError)
+			enabled := registerRunCommandFlag(flags)
+			if err := flags.Parse(tt.args); err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+			if *enabled != tt.want {
+				t.Errorf("enable-run-command = %v, want %v", *enabled, tt.want)
+			}
+		})
+	}
+}
 
 func TestRunHTTP_ServesHealthzAndMCP(t *testing.T) {
 	const addr = "127.0.0.1:18099"

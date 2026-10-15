@@ -22,3 +22,4 @@ than editing history.
 | [0006](0006-docker-cli-over-ssh-not-engine-api.md) | Docker via CLI-over-SSH, not the Engine API |
 | [0007](0007-structured-errors-and-confirm-gated-mutations.md) | Structured errors and confirm-gated mutating tools |
 | [0008](0008-ssh-public-key-auth-for-network-devices.md) | SSH public-key auth for routers/switches |
+| [0009](0009-opt-in-arbitrary-command-execution.md) | Arbitrary command execution is opt-in |

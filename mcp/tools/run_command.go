@@ -36,7 +36,8 @@ type CommandRunner interface {
 	Run(ctx context.Context, server, command string) (ssh.Result, error)
 }
 
-// RegisterRunCommand adds the run_command tool to server. runner executes
+// RegisterRunCommand adds the opt-in run_command escape hatch to server.
+// Callers must gate registration explicitly because runner executes unrestricted
 // commands against inventory servers (normally an *ssh.Pool).
 func RegisterRunCommand(server *mcp.Server, logger *slog.Logger, runner CommandRunner) {
 	mcp.AddTool(server, &mcp.Tool{

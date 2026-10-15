@@ -9,6 +9,8 @@ services:
       - "-transport=http"
       - "-http-addr=:8080"
       # - "-known-hosts=/home/nonroot/.ssh/known_hosts"
+      # High risk: uncomment only if agents require unrestricted shell access.
+      # - "-enable-run-command"
     ports:
       - "8080:8080"
     volumes:

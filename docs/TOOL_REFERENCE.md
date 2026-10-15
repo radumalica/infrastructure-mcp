@@ -1,9 +1,9 @@
 # Tool Reference
 
-Every tool below is registered in `cmd/server/main.go` and implemented under
-`mcp/tools/`. This reference lists each tool's input parameters and a sample
-output shape. All example values are synthetic — copy-paste the shape, not
-the data.
+Every tool below is implemented under `mcp/tools/`; named tools are registered
+in `cmd/server/main.go` by default. This reference lists each tool's input
+parameters and a sample output shape. All example values are synthetic —
+copy-paste the shape, not the data.
 
 Conventions that apply across the whole tool surface (see
 [Tool Design Philosophy](../README.md#tool-design-philosophy) in the README):
@@ -39,6 +39,11 @@ Conventions that apply across the whole tool surface (see
 ```
 
 ### `run_command`
+
+> **Opt-in escape hatch:** this tool is not registered by default. Start the
+> server with `-enable-run-command` only when unrestricted shell execution is
+> intentional. Connected agents can run arbitrary commands on inventory
+> targets; prefer the named tools elsewhere in this reference.
 
 | Param | Required | Description |
 |---|---|---|
