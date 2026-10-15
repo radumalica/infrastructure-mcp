@@ -1,3 +1,12 @@
+## v0.7.2 - 2026-10-15
+#### Bug Fixes
+- (**release**) unblock image publish, ship binaries, add community files (#22) - (a85db82) - Radu
+#### Documentation
+- (**changelog**) update for v0.7.1 [skip ci] - (d49e934) - repo-gha[bot]
+- remove paid-skill plans from the public repo (#21) - (d885432) - Radu
+
+- - -
+
 ## v0.7.1 - 2026-10-15
 #### Bug Fixes
 - (**deps**) bump x/net, x/crypto, x/text to clear Trivy findings (#20) - (ac5b968) - Radu
