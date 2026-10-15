@@ -24,15 +24,15 @@ Keep the Go version in step with `go` in `go.mod`.
 
 ```json
 [
-  "mcp-proxy",
-  "--",
   "/usr/local/bin/infrastructure-mcp",
   "-inventory",
   "/app/examples/demo/inventory.demo.yaml"
 ]
 ```
 
-`mcp-proxy` exposes the stdio server to Glama. The inventory is the secret-free
+Glama wraps stdio servers with `mcp-proxy` automatically, so the command must
+invoke the binary directly; adding `mcp-proxy` here would stack a second proxy
+layer and can prevent startup or tool discovery. The inventory is the secret-free
 demo one, so the server starts and lists its tools without any real
 infrastructure. It must not be `configs/inventory.example.yaml`, which fails to
 load unless its `${VAR}` secrets are set.
