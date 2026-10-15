@@ -1,0 +1,20 @@
+skills:
+  - name: infrastructure-mcp-operator
+    positive_prompts:
+      - Check disk and memory on my archive server through infrastructure-mcp.
+      - Show me the Docker containers on the backup host using the MCP tools.
+      - Inspect my Kubernetes nodes with infrastructure-mcp.
+      - What alerts are firing in my configured Grafana instance?
+      - Use infrastructure-mcp to inspect the interfaces on my Cisco switch.
+    negative_prompts:
+      - Install Docker on this laptop.
+      - Write a Kubernetes deployment manifest.
+      - Explain how SSH public keys work.
+      - Review the Go code in this repository.
+      - Create a Grafana dashboard JSON file.
+    required_phrases:
+      - Never ask the user to paste
+      - Do not use `run_command`
+      - explicitly approved the exact target and action
+      - Separate observed tool output from interpretation
+      - unavailable adapters explicitly
