@@ -14,11 +14,17 @@ documentation, so re-verify if the form changes.
 [
   "apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*",
   "curl -fsSL https://go.dev/dl/go1.26.9.linux-$(dpkg --print-architecture).tar.gz | tar -C /usr/local -xz",
-  "GOCACHE=/tmp/go-cache GOPATH=/tmp/go /usr/local/go/bin/go build -buildvcs=false -trimpath -ldflags='-s -w' -o /usr/local/bin/infrastructure-mcp ./cmd/server"
+  "GOCACHE=/tmp/go-cache GOPATH=/tmp/go /usr/local/go/bin/go build -buildvcs=false -trimpath -ldflags='-s -w' -o /usr/local/bin/infrastructure-mcp ./cmd/server",
+  "mkdir -p /etc/infrastructure-mcp && printf 'servers:\\n  demo-server:\\n    hostname: demo.invalid\\n    user: demo\\n' > /etc/infrastructure-mcp/inventory.yaml"
 ]
 ```
 
 Keep the Go version in step with `go` in `go.mod`.
+
+The last step writes a tiny inventory outside `/app`. Do not point the server at
+a file inside the repository clone: Glama's runtime image did not contain
+`/app/examples/demo/inventory.demo.yaml`, and the server exited with
+`open ...: no such file or directory`.
 
 ## CMD arguments (JSON array)
 
@@ -26,20 +32,20 @@ Keep the Go version in step with `go` in `go.mod`.
 [
   "/usr/local/bin/infrastructure-mcp",
   "-inventory",
-  "/app/examples/demo/inventory.demo.yaml"
+  "/etc/infrastructure-mcp/inventory.yaml"
 ]
 ```
 
 Glama wraps stdio servers with `mcp-proxy` automatically, so the command must
 invoke the binary directly; adding `mcp-proxy` here would stack a second proxy
-layer and can prevent startup or tool discovery. The inventory is the secret-free
-demo one, so the server starts and lists its tools without any real
-infrastructure. It must not be `configs/inventory.example.yaml`, which fails to
-load unless its `${VAR}` secrets are set.
+layer and can prevent startup or tool discovery. The generated inventory has one
+placeholder target and no secrets, so the server starts and lists its tools
+without any real infrastructure. It must not be `configs/inventory.example.yaml`,
+which fails to load unless its `${VAR}` secrets are set.
 
 ## Environment variables JSON schema
 
-With the secret-free demo inventory the server needs no environment variables, so
+With the secret-free generated inventory the server needs no environment variables, so
 declare none. This is a valid JSON Schema (draft 7) that requires nothing:
 
 ```json
