@@ -1,3 +1,11 @@
+## v0.8.0 - 2026-10-15
+#### Features
+- (**examples**) try-it demo, demo GIF and CI smoke test (#23) - (61f7646) - Radu
+#### Documentation
+- (**changelog**) update for v0.7.2 [skip ci] - (6d4dbe8) - repo-gha[bot]
+
+- - -
+
 ## v0.7.2 - 2026-10-15
 #### Bug Fixes
 - (**release**) unblock image publish, ship binaries, add community files (#22) - (a85db82) - Radu
