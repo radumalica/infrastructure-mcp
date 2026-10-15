@@ -20,3 +20,4 @@ configs/backups/
 .idea/
 .vscode/
 .claude/
+examples/demo/.demo-keys/

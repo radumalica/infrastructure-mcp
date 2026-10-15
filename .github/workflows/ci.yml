@@ -115,3 +115,30 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: "1"
           ignore-unfixed: true
+
+  demo-smoke:
+    name: demo-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Runs the try-it demo end to end (two SSH targets + the server) so the
+      # README's two-minute path cannot silently rot.
+      - name: Run demo
+        run: bash examples/demo/run-demo.sh | tee demo.out
+
+      - name: Check demo output
+        run: |
+          grep -q '"name": "demo-web"' demo.out
+          grep -q '"uptime_seconds"' demo.out
+          grep -q '"used_percent"' demo.out
+          grep -q '"category": "not_found"' demo.out
+          # Arbitrary command execution must stay opt-in (ADR 0009).
+          if grep -qE '(^| )(run_command|docker_exec|kubectl_exec)( |$)' demo.out; then
+            echo "exec tools were registered by default" >&2
+            exit 1
+          fi
+
+      - name: Tear down
+        if: always()
+        run: bash examples/demo/run-demo.sh down

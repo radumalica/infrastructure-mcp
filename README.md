@@ -16,6 +16,12 @@
 
 A self-hosted [Model Context Protocol](https://modelcontextprotocol.io) server that exposes high-level, auditable tools (`disk_usage()`, `docker_restart()`, `grafana_alerts()`, ...) instead of `execute(command)`. Every call is inventory-driven, structured, and logged — the agent reasons about infrastructure; this server is the only thing that actually touches it.
 
+<p align="center">
+  <img src="assets/demo.gif" alt="Terminal recording: an agent lists the server's tools, calls uptime and memory_usage on demo targets, and is refused an unknown target" width="85%">
+</p>
+
+> **Try it in two minutes, with no real infrastructure:** `cd examples/demo && ./run-demo.sh` — see the [demo guide](examples/demo/README.md).
+
 > **Status:** early, actively developed. See [Roadmap](#roadmap) for what's implemented and what's coming.
 
 **Manage:** ✓ Linux &nbsp; ✓ Docker &nbsp; ✓ Kubernetes &nbsp; ✓ Proxmox &nbsp; ✓ Grafana &nbsp; ✓ Cisco
