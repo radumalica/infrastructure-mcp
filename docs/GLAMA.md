@@ -37,6 +37,25 @@ demo one, so the server starts and lists its tools without any real
 infrastructure. It must not be `configs/inventory.example.yaml`, which fails to
 load unless its `${VAR}` secrets are set.
 
+## Environment variables JSON schema
+
+With the secret-free demo inventory the server needs no environment variables, so
+declare none. This is a valid JSON Schema (draft 7) that requires nothing:
+
+```json
+{
+  "type": "object",
+  "properties": {},
+  "required": []
+}
+```
+
+If Glama pre-fills this field with something else, replace it with the schema
+above. Do not mark `MCP_HTTP_TOKEN`, `GRAFANA_TOKEN` or other secrets as required:
+they apply to HTTP mode and to real inventories, and a required variable would
+stop Glama's inspector from starting the server. `glama.json` only carries
+`$schema` and `maintainers`; it does not feed this field.
+
 ## Notes
 
 - Arbitrary command execution (`run_command`, `docker_exec`, `kubectl_exec`) is
