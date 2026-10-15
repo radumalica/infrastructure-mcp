@@ -19,10 +19,12 @@ client by default.
 
 ## Decision
 
-Do not register `run_command` unless the operator explicitly starts the server
+Do not register `run_command`, `docker_exec` or `kubectl_exec` unless the operator explicitly starts the server
 with `-enable-run-command`. The flag defaults to false. When enabled, startup
 emits a warning that connected agents can execute arbitrary commands on
 inventory targets.
+
+The container- and pod-scoped exec tools run arbitrary commands too, so they share the same gate.
 
 Named, validated tools remain the supported default. Agent skills and examples
 must use them and must not assume `run_command` is available.

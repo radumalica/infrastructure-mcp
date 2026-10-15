@@ -13,4 +13,5 @@ type DockerDiagnostics interface {
 	Stats(ctx context.Context, server, container string) ([]docker.ContainerStats, error)
 	Logs(ctx context.Context, server, container string, tail int) (string, error)
 	Restart(ctx context.Context, server, container string) error
+	Exec(ctx context.Context, server, container, command string) (docker.ExecResult, error)
 }

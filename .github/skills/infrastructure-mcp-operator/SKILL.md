@@ -12,8 +12,8 @@ infrastructure without handling its credentials.
 
 1. Verify that the required named MCP tools are available before calling them.
 2. Never ask the user to paste SSH keys, passwords, kubeconfigs, or API tokens.
-3. Do not use `run_command`, even if available. It is an unrestricted opt-in
-   escape hatch, not part of this workflow.
+3. Do not use `run_command`, `docker_exec` or `kubectl_exec`, even if available. They
+   are unrestricted opt-in escape hatches, not part of this workflow.
 4. Start read-only. Do not call a mutating tool unless the user requested the
    change and explicitly approved the exact target and action.
 5. Use only inventory target names and service instance names accepted by the

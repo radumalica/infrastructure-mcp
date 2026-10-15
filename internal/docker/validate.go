@@ -3,6 +3,7 @@ package docker
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"infrastructure-mcp/internal/toolerr"
 )
@@ -22,4 +23,13 @@ func validateContainerRef(ref string) error {
 		return fmt.Errorf("docker: invalid container reference %q: %w", ref, toolerr.ErrInvalidInput)
 	}
 	return nil
+}
+
+// shellQuoteSingle wraps s in single quotes, escaping any embedded single
+// quote so the whole string reaches the remote `sh -c` as one argument
+// regardless of its contents — the same "no shell interpolation" posture
+// validateContainerRef enforces for container names, applied here to a
+// free-form command string instead of a whitelist pattern.
+func shellQuoteSingle(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

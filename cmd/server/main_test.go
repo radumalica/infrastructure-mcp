@@ -34,7 +34,9 @@ func TestRegisterRunCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := mcp.NewServer(&mcp.Implementation{Name: "test-server", Version: "test"}, nil)
-			registerRunCommand(server, slog.New(slog.NewTextHandler(io.Discard, nil)), stubCommandRunner{}, tt.enabled)
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			registerRunCommand(server, logger, stubCommandRunner{}, tt.enabled)
+			registerScopedExecTools(server, logger, nil, nil, tt.enabled)
 
 			clientTransport, serverTransport := mcp.NewInMemoryTransports()
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -72,14 +74,14 @@ func TestRegisterRunCommand(t *testing.T) {
 				t.Fatalf("ListTools failed: %v", err)
 			}
 
-			present := false
+			registered := make(map[string]bool, len(result.Tools))
 			for _, tool := range result.Tools {
-				if tool.Name == "run_command" {
-					present = true
-				}
+				registered[tool.Name] = true
 			}
-			if present != tt.wantPresent {
-				t.Errorf("run_command present = %v, want %v", present, tt.wantPresent)
+			for _, name := range []string{"run_command", "docker_exec", "kubectl_exec"} {
+				if registered[name] != tt.wantPresent {
+					t.Errorf("%s present = %v, want %v", name, registered[name], tt.wantPresent)
+				}
 			}
 		})
 	}

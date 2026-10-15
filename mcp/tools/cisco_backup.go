@@ -27,7 +27,7 @@ type CiscoBackupOutput struct {
 func RegisterCiscoBackup(server *mcp.Server, logger *slog.Logger, diag CiscoDiagnostics) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "cisco_backup",
-		Description: "Fetch a Cisco device's running configuration (\"show running-config\"), as-is. Sent as a single command with no session setup: if the device paginates output (has not been configured with \"terminal length 0\"), only the first page is returned.",
+		Description: "Fetch a Cisco device's running configuration (\"show running-config\"), as-is. Telnet-connected devices get \"terminal length 0\" sent first automatically; SSH-connected devices do not (SSH runs one command per ephemeral session, so the setting wouldn't carry over) — if an SSH-connected device paginates output, only the first page is returned unless \"terminal length 0\" is already configured on the device.",
 	}, withLogging(logger, "cisco_backup", func(ctx context.Context, req *mcp.CallToolRequest, in CiscoBackupInput) (*mcp.CallToolResult, CiscoBackupOutput, error) {
 		config, err := diag.Backup(ctx, in.Device)
 		if err != nil {

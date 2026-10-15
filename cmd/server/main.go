@@ -21,6 +21,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"infrastructure-mcp/internal/audit"
+	"infrastructure-mcp/internal/backupstore"
 	"infrastructure-mcp/internal/cisco"
 	"infrastructure-mcp/internal/docker"
 	"infrastructure-mcp/internal/grafana"
@@ -31,6 +33,7 @@ import (
 	"infrastructure-mcp/internal/remote"
 	"infrastructure-mcp/internal/ssh"
 	"infrastructure-mcp/internal/telnet"
+	"infrastructure-mcp/mcp/resources"
 	"infrastructure-mcp/mcp/tools"
 )
 
@@ -53,6 +56,8 @@ func run() error {
 	healthcheckURL := flag.String("healthcheck-url", "http://127.0.0.1:8080/healthz", "URL checked when -healthcheck is set")
 	allowAnonymousHTTP := flag.Bool("allow-anonymous-http", false, "allow -transport=http to serve without a bearer token (lab/dev only — every registered tool becomes reachable to anyone who can reach the port)")
 	enableRunCommand := registerRunCommandFlag(flag.CommandLine)
+	backupDir := flag.String("backup-dir", "configs/backups", "directory cisco_backup_diff persists its per-device config snapshots in (created on first use)")
+	auditHistorySize := flag.Int("audit-history-size", 200, "number of recent mutating tool invocations retained in-memory and exposed via the audit://recent resource")
 	flag.Parse()
 
 	if *healthcheck {
@@ -93,6 +98,7 @@ func run() error {
 	grafanaClient := grafana.New(inv, nil)
 	proxmoxClient := proxmox.New(inv, nil)
 	ciscoClient := cisco.New(remotePool, inv)
+	auditLog := audit.New(*auditHistorySize)
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "infrastructure-mcp",
@@ -100,7 +106,9 @@ func run() error {
 	}, nil)
 
 	tools.RegisterListServers(server, logger, inv)
+	tools.RegisterCheckInventoryHealth(server, logger, *inventoryPath)
 	registerRunCommand(server, logger, remotePool, *enableRunCommand)
+	registerScopedExecTools(server, logger, dockerClient, kubeClient, *enableRunCommand)
 	tools.RegisterUptime(server, logger, linuxClient)
 	tools.RegisterDiskUsage(server, logger, linuxClient)
 	tools.RegisterMemoryUsage(server, logger, linuxClient)
@@ -114,7 +122,7 @@ func run() error {
 	tools.RegisterDockerImages(server, logger, dockerClient)
 	tools.RegisterDockerStats(server, logger, dockerClient)
 	tools.RegisterDockerLogs(server, logger, dockerClient)
-	tools.RegisterDockerRestart(server, logger, dockerClient)
+	tools.RegisterDockerRestart(server, logger, dockerClient, auditLog)
 	tools.RegisterKubectlGetPods(server, logger, kubeClient)
 	tools.RegisterKubectlLogs(server, logger, kubeClient)
 	tools.RegisterKubectlEvents(server, logger, kubeClient)
@@ -127,14 +135,17 @@ func run() error {
 	tools.RegisterProxmoxNodes(server, logger, proxmoxClient)
 	tools.RegisterProxmoxVMs(server, logger, proxmoxClient)
 	tools.RegisterProxmoxTasks(server, logger, proxmoxClient)
-	tools.RegisterProxmoxStartVM(server, logger, proxmoxClient)
-	tools.RegisterProxmoxStopVM(server, logger, proxmoxClient)
-	tools.RegisterProxmoxSnapshot(server, logger, proxmoxClient)
+	tools.RegisterProxmoxStartVM(server, logger, proxmoxClient, auditLog)
+	tools.RegisterProxmoxStopVM(server, logger, proxmoxClient, auditLog)
+	tools.RegisterProxmoxSnapshot(server, logger, proxmoxClient, auditLog)
 	tools.RegisterCiscoBackup(server, logger, ciscoClient)
 	tools.RegisterCiscoVersion(server, logger, ciscoClient)
 	tools.RegisterCiscoInterfaces(server, logger, ciscoClient)
 	tools.RegisterCiscoInventory(server, logger, ciscoClient)
 	tools.RegisterCiscoLogs(server, logger, ciscoClient)
+	tools.RegisterCiscoBackupDiff(server, logger, ciscoClient, backupstore.New(*backupDir))
+
+	resources.RegisterAuditHistory(server, auditLog)
 
 	switch *transportKind {
 	case "stdio":
@@ -157,7 +168,7 @@ func run() error {
 }
 
 func registerRunCommandFlag(flags *flag.FlagSet) *bool {
-	return flags.Bool("enable-run-command", false, "enable unrestricted shell command execution on inventory targets (disabled by default; high risk)")
+	return flags.Bool("enable-run-command", false, "enable unrestricted command execution: run_command, docker_exec and kubectl_exec (disabled by default; high risk)")
 }
 
 func registerRunCommand(server *mcp.Server, logger *slog.Logger, runner tools.CommandRunner, enabled bool) {
@@ -167,6 +178,19 @@ func registerRunCommand(server *mcp.Server, logger *slog.Logger, runner tools.Co
 
 	logger.Warn("unrestricted shell command execution enabled (-enable-run-command); connected agents can execute arbitrary commands on inventory targets")
 	tools.RegisterRunCommand(server, logger, runner)
+}
+
+// registerScopedExecTools gates docker_exec and kubectl_exec behind the same
+// opt-in as run_command: they run arbitrary commands, only scoped to a
+// container or pod (ADR 0009).
+func registerScopedExecTools(server *mcp.Server, logger *slog.Logger, docker tools.DockerDiagnostics, kube tools.KubernetesDiagnostics, enabled bool) {
+	if !enabled {
+		return
+	}
+
+	logger.Warn("unrestricted container/pod command execution enabled (-enable-run-command); connected agents can execute arbitrary commands in containers and pods")
+	tools.RegisterDockerExec(server, logger, docker)
+	tools.RegisterKubectlExec(server, logger, kube)
 }
 
 // runHealthcheck performs a single GET against url and returns nil only

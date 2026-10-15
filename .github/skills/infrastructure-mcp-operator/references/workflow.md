@@ -12,7 +12,8 @@ Use only tools visible in the connected MCP session.
 | Grafana | `grafana_alerts`, `grafana_annotations`, `grafana_dashboards`, `grafana_query` |
 | Proxmox | `proxmox_nodes`, `proxmox_vms`, `proxmox_tasks` |
 | Cisco status | `cisco_interfaces`, `cisco_logs`, `cisco_version`, `cisco_inventory` |
-| Cisco configuration backup | `cisco_backup` only after the user confirms the exact device; treat returned configuration as sensitive |
+| Cisco configuration backup | `cisco_backup` or `cisco_backup_diff` only after the user confirms the exact device; treat returned configuration as sensitive |
+| Server setup check | `check_inventory_health` |
 
 Prefer status and metadata before logs or raw datasource queries. Limit log
 volume and query scope. Treat recommendations returned by tools as guidance,
@@ -22,4 +23,6 @@ inside the server.
 
 Named mutating tools are `docker_restart`, `proxmox_start_vm`,
 `proxmox_stop_vm`, and `proxmox_snapshot`. Route these through the safe
-remediation workflow and preserve their `confirm: true` gate.
+remediation workflow and preserve their `confirm: true` gate. They accept
+`dry_run: true` to preview the exact action without confirmation; prefer that
+before asking the user to approve a change.

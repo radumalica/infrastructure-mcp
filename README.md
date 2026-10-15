@@ -81,11 +81,12 @@ Tools implemented and tested against the real MCP protocol so far:
 
 **Core (v0.1)**
 - `list_servers` — list inventory targets, optionally filtered by tag
+- `check_inventory_health` — validate the inventory file: parses, every `${VAR}` is set, every SSH key/kubeconfig file it references is readable
 - `uptime` — uptime and load averages
 - `disk_usage` — per-filesystem usage with warning/critical severity
 - `memory_usage` — memory utilization with warning/critical severity
 
-Optional compatibility escape hatch: `run_command` executes an arbitrary shell command against an inventory target. It is disabled by default and is registered only when the server starts with `-enable-run-command`. Prefer the named tools above; enabling this escape hatch grants connected agents unrestricted command execution on inventory targets.
+Optional compatibility escape hatches: `run_command`, `docker_exec` and `kubectl_exec` execute arbitrary commands on an inventory target, in a container, or in a pod. They are disabled by default and registered only when the server starts with `-enable-run-command`. Prefer the named tools; enabling them grants connected agents unrestricted command execution.
 
 **Linux (v0.2)**
 - `failed_services` — systemd units in the failed state
@@ -101,6 +102,7 @@ Optional compatibility escape hatch: `run_command` executes an arbitrary shell c
 - `docker_stats` — point-in-time resource usage snapshot
 - `docker_logs` — recent combined stdout/stderr log lines
 - `docker_restart` — restart a container (destructive; requires `confirm: true`)
+- `docker_exec` (opt-in, `-enable-run-command`) — run a command inside a running container, the container-scoped equivalent of `run_command`
 
 **Kubernetes (v0.4)**
 - `kubectl_get_pods` — list pods, optionally scoped to a namespace
@@ -108,6 +110,7 @@ Optional compatibility escape hatch: `run_command` executes an arbitrary shell c
 - `kubectl_events` — recent cluster events, most recent first
 - `kubectl_describe` — structured pod summary (spec/status highlights + recent events)
 - `kubectl_nodes` — node list with readiness, roles, and capacity
+- `kubectl_exec` (opt-in, `-enable-run-command`) — run a command inside a pod's container, the pod-scoped equivalent of `run_command`/`docker_exec`
 
 **Grafana (v0.5)**
 - `grafana_alerts` — currently firing/resolved alert instances from the alerting API
@@ -129,8 +132,11 @@ Optional compatibility escape hatch: `run_command` executes an arbitrary shell c
 - `cisco_interfaces` — interface list with IP address, admin/link status, and line protocol
 - `cisco_inventory` — hardware components (chassis, modules, PSUs) with PID/VID/serial number
 - `cisco_logs` — buffered syslog messages, optionally capped to the most recent N lines
+- `cisco_backup_diff` — fetch the running config and diff it against the last snapshot taken by this tool, flagging config drift
 
 **Cross-cutting, since v0.1**
+- `audit://recent` MCP resource — the most recent mutating tool invocations (`docker_restart`, `proxmox_start_vm`/`proxmox_stop_vm`/`proxmox_snapshot`), newest first, in-memory only (`-audit-history-size`, default 200)
+- `dry_run: true` on every confirm-gated mutating tool — reports the exact command/API call that would run without acting, taking priority over `confirm` even if both are set
 - Legacy network device support: Telnet transport, SSH legacy-crypto negotiation, transparent per-target protocol dispatch, SSH public-key auth for routers/switches
 - Structured error contract on every tool (`message`, `recommendation`, `retryable`, `category`)
 - Structured per-execution logging (`tool`, `user`, `target`, `duration`, `result`, `error`)
@@ -401,6 +407,8 @@ proxmox:
   lab:
     url: https://pve.lab.local:8006
     token: ${PROXMOX_TOKEN}
+    # insecure_skip_verify: true   # only for a stock Proxmox's self-signed
+                                    # cert — lab/dev only, never production
 
 # All auth (client cert, bearer token, exec plugin, ...) lives inside the
 # kubeconfig file itself — nothing is inlined into the inventory.
@@ -433,7 +441,9 @@ More focused, single-concept inventory fragments (key-authenticated network devi
 | `-http-addr` | `:8080` | Address to listen on when `-transport=http` |
 | `-healthcheck` | `false` | Instead of starting the server, GET `-healthcheck-url` and exit 0/1 — used as the container `HEALTHCHECK` |
 | `-allow-anonymous-http` | `false` | Allow `-transport=http` to serve without a bearer token — **lab/dev only**, every tool becomes reachable to anyone who can reach the port |
-| `-enable-run-command` | `false` | Register the unrestricted `run_command` shell escape hatch — **high risk**, prefer named tools |
+| `-enable-run-command` | `false` | Register the unrestricted `run_command`, `docker_exec` and `kubectl_exec` escape hatches — **high risk**, prefer named tools |
+| `-backup-dir` | `configs/backups` | Directory `cisco_backup_diff` persists its per-device config snapshots in (created on first use) |
+| `-audit-history-size` | `200` | Number of recent mutating tool invocations retained in-memory and exposed via the `audit://recent` resource |
 
 Host key verification is **fail-closed by default**: an unrecognized target's connection is refused unless it's in `known_hosts` or you explicitly opt into insecure mode. `-transport=http` is fail-closed the same way: it refuses to start unless the `MCP_HTTP_TOKEN` environment variable is set (see below) or `-allow-anonymous-http` is passed explicitly.
 
@@ -705,13 +715,15 @@ Tools never return a raw Go error. Every failure is shaped as:
 - No secrets in logs
 - No secrets in prompts
 - Named tools do not interpolate unvalidated user input into shell commands
-- The unrestricted `run_command` escape hatch is disabled by default; `-enable-run-command` must be passed explicitly and grants connected agents arbitrary command execution on inventory targets
+- The unrestricted `run_command`, `docker_exec` and `kubectl_exec` escape hatches are disabled by default; `-enable-run-command` must be passed explicitly and grants connected agents arbitrary command execution
 - Validate all inputs
 - Whitelist inventory — no target is reachable unless it's named in the inventory
 - Least privilege
 - Read-only by default
 - Dangerous actions require explicit confirmation (e.g. `docker_restart` requires `confirm: true` and is a no-op otherwise)
+- Those same mutating tools accept `dry_run: true` to preview the exact command/API call that would run without acting — and it takes priority over `confirm` even if both are set
 - `-transport=http` is fail-closed: it refuses to start without a bearer token (`MCP_HTTP_TOKEN`) unless `-allow-anonymous-http` is explicitly passed
+- TLS certificate verification is on by default for Grafana/Proxmox; `insecure_skip_verify: true` disables it per-instance — lab/dev only, same posture as `-insecure-ignore-host-key` for SSH
 
 Found a security issue? Please report it privately rather than opening a public issue — see [Contributing](#contributing).
 

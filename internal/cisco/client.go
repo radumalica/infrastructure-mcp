@@ -110,14 +110,37 @@ func (c *Client) run(ctx context.Context, target, cmd string) (string, error) {
 // running-config"), as-is — a config dump has no meaningful structured
 // form beyond its own text.
 //
-// This sends a single command over a one-shot session (internal/ssh and
-// internal/telnet both run one command per call, with no session setup
-// step), so it does NOT send "terminal length 0" first. On a device
-// whose session-default page length hasn't been set to unlimited, IOS
-// will paginate the response at a "--More--" prompt and this returns only
-// the first page. Configure "terminal length 0" (or the per-line
-// equivalent) on any device this tool is used against.
+// Telnet-connected devices: internal/telnet.Pool keeps one persistent
+// session per target across Run calls (see its doc comment), so this
+// sends "terminal length 0" first on its own line, then
+// "show running-config" on the same underlying session — the pagination
+// setting genuinely carries over, this isn't a guess.
+//
+// SSH-connected devices: internal/ssh.Pool.Run opens a brand-new exec
+// channel per call on IOS, and terminal/pagination settings do not
+// survive across separate exec-channel invocations (this mirrors why
+// tools like Netmiko always drive Cisco IOS through a persistent
+// interactive shell, never one-shot exec) — sending "terminal length 0"
+// as its own Run call here would set it on a channel that's immediately
+// discarded, doing nothing useful. So for SSH, this still sends only
+// "show running-config" and still documents the known limitation: on a
+// device whose session-default page length hasn't been set to unlimited,
+// IOS will paginate at a "--More--" prompt and this returns only the
+// first page. Configure "terminal length 0" (or the per-line equivalent)
+// on any SSH-reached device this tool is used against. Fixing this for
+// SSH too would require adding a persistent interactive (PTY) session
+// primitive to internal/ssh, a bigger change than this fix warrants on
+// its own.
 func (c *Client) Backup(ctx context.Context, target string) (string, error) {
+	t, err := c.inv.Target(target)
+	if err != nil {
+		return "", err
+	}
+	if t.Protocol == inventory.ProtocolTelnet {
+		if _, err := c.run(ctx, target, "terminal length 0"); err != nil {
+			return "", err
+		}
+	}
 	return c.run(ctx, target, "show running-config")
 }
 
