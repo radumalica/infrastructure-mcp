@@ -32,9 +32,8 @@ infrastructure without handling its credentials.
 5. Collect read-only evidence from broad status to specific detail. Avoid
    repeated or unbounded log requests.
 6. Return observations, interpretation, unknowns, and the next safe action.
-7. For incident diagnosis, recurring fleet checks, or state changes, use the
-   dedicated incident-triage, health-brief, or safe-remediation workflow when it
-   is installed.
+7. For state changes, stop after presenting the plan and wait for the user's
+   explicit approval of the exact target and action.
 
 ## Output
 
